@@ -1,7 +1,7 @@
 // Firebase configuration and initialization
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
-import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, initializeFirestore } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
@@ -18,10 +18,18 @@ const firebaseConfig = {
 // Initialize Firebase
 const firebaseApp = initializeApp(firebaseConfig);
 const analytics = getAnalytics(firebaseApp);
-const dbFirestore = getFirestore(firebaseApp);
+
+// Use initializeFirestore to be explicit about the database instance
+const dbFirestore = initializeFirestore(firebaseApp, {
+  databaseId: '(default)'
+});
+
+console.log("Firebase initialized for project:", firebaseConfig.projectId);
+
 const storage = getStorage(firebaseApp);
 const auth = getAuth(firebaseApp);
 let currentUser = null;
+let syncFailureCount = 0;
 
 // Helper function to upload images to Firebase Storage
 async function uploadImage(base64Data, path) {
@@ -32,6 +40,9 @@ async function uploadImage(base64Data, path) {
     await uploadString(storageRef, base64Data, 'data_url');
     return await getDownloadURL(storageRef);
   } catch (error) {
+    if (error.code === 'storage/unauthorized') {
+      console.error("CRITICAL: Firebase Storage permission denied. Please ensure your Storage Security Rules allow writes to the 'users/' path for authenticated users.");
+    }
     console.error("Image upload failed:", error);
     return base64Data; // Return original (likely placeholder) on failure
   }
@@ -97,7 +108,12 @@ async function uploadImage(base64Data, path) {
 
   // ===== Data Handling =====
   let defaultMenu = [];
-  let menu, activeOrders, transactions, settings, staff, dishCategories, customers;
+  let menu = [];
+  let activeOrders = {};
+  let transactions = [];
+  let staff = [];
+  let dishCategories = [];
+  let customers = [];
 
   const defaultDishCategories = [];
   const defaultSettings = { 
@@ -110,61 +126,140 @@ async function uploadImage(base64Data, path) {
     lowStockThreshold: 10,
     taxRate: 0
   };
+  let settings = { ...defaultSettings };
   const defaultStaff = [];
   
   let printerDevice = null;
   let printerType = null; // 'USB' or 'BLUETOOTH'
-  let units;
+  let units = [];
 
   async function saveData() {
     try {
       // Save to local IndexedDB
       await Promise.all([
-        saveState('menu', menu),
-        saveState('activeOrders', activeOrders),
-        saveState('transactions', transactions),
-        saveState('settings', settings),
-        saveState('staff', staff),
-        saveState('dishCategories', dishCategories),
-        saveState('customers', customers),
-        saveState('units', units)
+        saveState('menu', menu || []),
+        saveState('activeOrders', activeOrders || {}),
+        saveState('transactions', transactions || []),
+        saveState('settings', settings || defaultSettings),
+        saveState('staff', staff || []),
+        saveState('dishCategories', dishCategories || []),
+        saveState('customers', customers || []),
+        saveState('units', units || [])
       ]);
 
       // Sync to Firebase Firestore if logged in
       if (currentUser) {
-        const shopData = {
-          menu, activeOrders, transactions, settings, staff, 
-          dishCategories, customers, units,
+        // Prepare data for Firestore. 
+        // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
+        const shopData = JSON.parse(JSON.stringify({
+          menu: menu || [],
+          activeOrders: activeOrders || {},
+          transactions: transactions || [],
+          settings: settings || defaultSettings,
+          staff: staff || [],
+          dishCategories: dishCategories || [],
+          customers: customers || [],
+          units: units || [],
           lastUpdated: new Date().toISOString()
-        };
+        }));
+
+        // If we have many consecutive failures, stop trying until manual sync or reload
+        if (syncFailureCount > 5) {
+          console.warn("Sync suspended due to repeated failures. Check Firebase Console configuration.");
+          return;
+        }
+
         await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData);
+        syncFailureCount = 0; // Reset on success
+
+        // Update Last Synced UI Tooltip
+        const syncBtn = document.getElementById('sync-now-btn');
+        if (syncBtn) {
+          syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        }
       }
+      updateOnlineStatus();
     } catch (error) {
-      console.error("Failed to save data to IndexedDB:", error);
+      console.error("Sync failed:", error);
+      syncFailureCount++;
+      updateOnlineStatus();
       // Silent failure for cloud sync to allow offline usage
     }
   }
 
+  async function syncNow() {
+    if (!currentUser) return alert("Please login to sync data to the cloud.");
+    const syncBtn = document.getElementById('sync-now-btn');
+    const icon = '🔄';
+    syncBtn.innerHTML = '<span class="spinner"></span>';
+    syncBtn.disabled = true;
+    
+    try {
+      await saveData();
+    } catch (e) {
+      alert("Sync failed: " + e.message);
+    } finally {
+      syncBtn.innerHTML = icon;
+      syncBtn.disabled = false;
+    }
+  }
+
   function updateOnlineStatus() {
-    let statusEl = document.getElementById('connectivity-status');
-    if (!statusEl) {
+    let container = document.getElementById('connectivity-container');
+    if (!container) {
       const header = document.querySelector('header');
-      statusEl = document.createElement('span');
+      container = document.createElement('div');
+      container.id = 'connectivity-container';
+      container.style.cssText = 'position: absolute; right: 280px; display: flex; align-items: center; gap: 8px; font-size: 0.4em;';
+      
+      const statusEl = document.createElement('span');
       statusEl.id = 'connectivity-status';
-      statusEl.style.cssText = 'position: absolute; right: 280px; font-size: 0.4em; padding: 2px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.3s;';
-      header.appendChild(statusEl);
+      statusEl.style.cssText = 'padding: 2px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.3s;';
+      container.appendChild(statusEl);
+
+      // Add Spinner CSS
+      const style = document.createElement('style');
+      style.textContent = `
+        .spinner {
+          display: inline-block; width: 10px; height: 10px;
+          border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+          border-top-color: #fff; animation: spin 1s ease-in-out infinite;
+          margin-right: 4px; vertical-align: middle;
+        }
+        @keyframes pulse-sync {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+          70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+        .sync-pulse { animation: pulse-sync 0.6s ease-in-out; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `;
+      document.head.appendChild(style);
+
+      const syncInfo = document.createElement('div');
+      syncInfo.style.cssText = 'display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; text-align: left;';
+      syncInfo.innerHTML = `
+        <button id="sync-now-btn" onclick="syncNow()" data-tooltip="Not synced yet" style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 1.2em; margin-top: 2px;">🔄</button>
+      `;
+      container.appendChild(syncInfo);
+      
+      header.appendChild(container);
     }
 
-    if (navigator.onLine) {
+    const statusEl = document.getElementById('connectivity-status');
+    if (navigator.onLine && syncFailureCount === 0) {
       statusEl.textContent = 'Online';
       statusEl.style.backgroundColor = 'rgba(40, 167, 69, 0.3)';
       statusEl.style.color = '#fff';
-      statusEl.title = 'Connected to internet. Cloud sync active.';
+    } else if (navigator.onLine && syncFailureCount > 0) {
+      statusEl.textContent = 'Sync Error';
+      statusEl.style.backgroundColor = 'rgba(220, 53, 69, 0.8)';
+      statusEl.style.color = '#fff';
+      statusEl.title = `Sync failed ${syncFailureCount} times. Check connection.`;
     } else {
-      statusEl.textContent = 'Offline Mode';
+      statusEl.textContent = 'Offline';
       statusEl.style.backgroundColor = 'rgba(255, 193, 7, 0.5)';
       statusEl.style.color = '#fff';
-      statusEl.title = 'No internet connection. Working in local-only mode.';
     }
   }
 
@@ -179,10 +274,15 @@ async function uploadImage(base64Data, path) {
     authContainer.style.cssText = 'position: absolute; right: 150px; display: flex; align-items: center; gap: 10px; font-size: 0.6em;';
 
     if (user) {
+      const name = user.displayName || 'User';
+      const initials = name.length > 1 ? (name[0] + name[name.length - 1]).toUpperCase() : name.toUpperCase();
+
       authContainer.innerHTML = `
-        <div style="text-align: right; line-height: 1.2;">
-          <div style="font-weight: bold;">${user.displayName || 'User'}</div>
-          <button onclick="logout()" style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 0.9em; text-decoration: underline;">Logout</button>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-weight: bold; letter-spacing: 1px;">${initials}</span>
+          <button onclick="logout()" class="logout-icon-btn" data-tooltip="Logout">
+            ❌️
+          </button>
         </div>
         <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
       `;
@@ -1815,6 +1915,9 @@ async function uploadImage(base64Data, path) {
   let dailySalesChartInstance;
 
   function updateDashboard() {
+    // FIX: Safety check to prevent TypeError if menu/transactions are not yet defined
+    if (!menu || !transactions) return;
+
     // Filter for sellable dishes (items with a recipe) to ensure dashboard reflects the menu, not raw inventory.
     const sellableDishes = menu.filter(item => item.recipe && item.recipe.length > 0);
     document.getElementById('menuCount').textContent = sellableDishes.length;
@@ -2311,7 +2414,13 @@ async function uploadImage(base64Data, path) {
   // ===== Unit Management =====
   function renderUnitList() {
     const tbody = document.getElementById('unitListBody');
+    if (!tbody) return;
+
+    // Guard against units being undefined or not an array
+    if (!units || !Array.isArray(units)) return;
+
     tbody.innerHTML = '';
+
     units.forEach((unit, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${unit.full}</td>
@@ -2788,16 +2897,80 @@ async function uploadImage(base64Data, path) {
       // Wait for authentication state to be determined.
       // This either hides the splash and shows the POS (if logged in) 
       // or shows the branded login overlay.
+      let unsubscribeSync = null;
+
+      function setupRealTimeSync(uid) {
+        if (unsubscribeSync) unsubscribeSync();
+        
+        // The onSnapshot listener provides real-time "Push" updates from the cloud to this device
+        unsubscribeSync = onSnapshot(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"), (docSnap) => {
+          // Only update if changes come from the cloud (not our own pending local writes)
+          if (docSnap.exists() && !docSnap.metadata.hasPendingWrites) {
+            const cloudData = docSnap.data();
+            console.log("Real-time data update received from another device.");
+            
+            // Sync global state variables
+            menu = cloudData.menu || menu;
+            activeOrders = cloudData.activeOrders || activeOrders;
+            transactions = cloudData.transactions || transactions;
+            settings = cloudData.settings || settings;
+            staff = cloudData.staff || staff;
+            dishCategories = cloudData.dishCategories || dishCategories;
+            customers = cloudData.customers || customers;
+            units = cloudData.units || units;
+
+            // Instantly refresh the current view to show the new data
+            refreshCurrentView();
+            
+            const syncBtn = document.getElementById('sync-now-btn');
+            if (syncBtn) {
+              syncBtn.setAttribute('data-tooltip', 'Remote update received: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+            }
+
+            // Visual Pulse Animation
+            const statusEl = document.getElementById('connectivity-status');
+            if (statusEl) {
+              statusEl.classList.add('sync-pulse');
+              setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+            }
+          }
+        }, (error) => {
+          console.error("Real-time sync error:", error);
+        });
+      }
+
+      function refreshCurrentView() {
+        const activeTab = document.querySelector('section.active');
+        if (!activeTab) return;
+        
+        const renderMap = {
+          'dashboardTab': updateDashboard,
+          'transactionsTab': renderTransactions,
+          'menuTab': renderMenu,
+          'addDishTab': renderDishesTable,
+          'settingsTab': () => { renderCategoryList(); renderUnitList(); renderStaffList(); renderCustomerList(); loadSettings(); },
+          'stockTab': () => { renderInventoryReport(); renderStockListTable(); renderUnitList(); },
+          'reportsTab': () => { populateReportFilters(); renderReport(); }
+        };
+        if (renderMap[activeTab.id]) renderMap[activeTab.id]();
+      }
+
       const remoteData = await new Promise((resolve) => {
         onAuthStateChanged(auth, async (user) => {
           currentUser = user;
           updateAuthUI(user);
           if (user) {
+            console.log("Fetching cloud data for UID:", user.uid);
             try {
               const docSnap = await getDoc(doc(dbFirestore, "users", user.uid, "data", "SHOP_DATA"));
+              setupRealTimeSync(user.uid);
               if (docSnap.exists()) return resolve(docSnap.data());
             } catch (e) {
-              console.warn("Cloud load failed, using local.");
+              if (e.code === 'failed-precondition' || e.message.includes('not found')) {
+                console.error("CRITICAL: Firestore Database not found or not enabled for project 'yoshop-b502f'.");
+                console.info("Verify your Project ID in Firebase Settings and ensure 'Cloud Firestore' is initialized.");
+              }
+              console.warn("Cloud load failed (Check if Firestore is enabled in Console):", e);
             }
           }
           resolve(null);
@@ -2805,14 +2978,14 @@ async function uploadImage(base64Data, path) {
       });
 
       // Assign to global variables, using defaults if null
-      menu = (remoteData && remoteData.menu) || (localData[0] !== null ? localData[0] : defaultMenu);
-      activeOrders = (remoteData && remoteData.activeOrders) || (localData[1] !== null ? localData[1] : {});
-      transactions = (remoteData && remoteData.transactions) || (localData[2] !== null ? localData[2] : []);
-      settings = (remoteData && remoteData.settings) || (localData[3] !== null ? localData[3] : defaultSettings);
-      staff = (remoteData && remoteData.staff) || (localData[4] !== null ? localData[4] : defaultStaff);
-      dishCategories = (remoteData && remoteData.dishCategories) || (localData[5] !== null ? localData[5] : defaultDishCategories);
-      customers = (remoteData && remoteData.customers) || (localData[6] !== null ? localData[6] : []);
-      units = (remoteData && remoteData.units) || (localData[7] !== null ? localData[7] : [
+      menu = (remoteData && remoteData.menu) || localData[0] || defaultMenu;
+      activeOrders = (remoteData && remoteData.activeOrders) || localData[1] || {};
+      transactions = (remoteData && remoteData.transactions) || localData[2] || [];
+      settings = (remoteData && remoteData.settings) || localData[3] || defaultSettings;
+      staff = (remoteData && remoteData.staff) || localData[4] || defaultStaff;
+      dishCategories = (remoteData && remoteData.dishCategories) || localData[5] || defaultDishCategories;
+      customers = (remoteData && remoteData.customers) || localData[6] || [];
+      units = (remoteData && remoteData.units) || localData[7] || [
         { full: 'Bottle', short: 'btl' },
         { full: 'Box', short: 'box' },
         { full: 'Can', short: 'can' },
@@ -2829,7 +3002,7 @@ async function uploadImage(base64Data, path) {
         { full: 'Piece', short: 'pc' },
         { full: 'Pint', short: 'pt' },
         { full: 'Pound', short: 'lb' }
-      ]);
+      ];
 
       // Hide splash screen and apply theme as soon as data is ready
       applyTheme();
@@ -2854,13 +3027,25 @@ async function uploadImage(base64Data, path) {
       setupSettingsAccordion();
       updatePrinterStatus(false);
 
-      const dashboardBtn = document.querySelector('nav button:first-child');
-      if (dashboardBtn) showTab('dashboardTab', dashboardBtn);
+      // Ensure dashboard is visible and data is rendered immediately
+      const dashboardBtn = document.querySelector('nav button[onclick*="dashboardTab"]');
+      if (dashboardBtn) {
+        showTab('dashboardTab', dashboardBtn);
+        updateDashboard(); 
+      }
 
       // Save default data on first run
       if (!localData[0] && !remoteData) {
         await saveData();
       }
+
+      // High-Frequency Sync Heartbeat
+      // Periodically pushes local data to the cloud to ensure all devices are perfectly aligned.
+      setInterval(() => {
+        if (currentUser && navigator.onLine) {
+          saveData();
+        }
+      }, 3000); // 3-second interval provides near-instant sync while respecting Firebase limits
 
       // Save on visibility change (mobile app backgrounding/closing)
       document.addEventListener('visibilitychange', () => {
@@ -3637,7 +3822,7 @@ Object.assign(window, {
   // Functions
   toggleNav, showTab, renderMenu, addDish, generateRandomBarcode, editDish,
   addNewRecipeItemFromForm, updateRecipeItemUnit, updateRecipeTotals,
-  previewDishImage, toggleAddDishForm, openBillSplitModal, closeSplitBillModal,
+  previewDishImage, previewLogo, toggleAddDishForm, openBillSplitModal, closeSplitBillModal,
   addSplitBill, removeSplitBill, moveItemToFirstBill, moveItemToUnassigned,
   processSplitPayments, addToOrder, decreaseQty, processBill, updatePaymentTotals,
   toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel,
@@ -3651,7 +3836,7 @@ Object.assign(window, {
   renderStockListTable, editStockItem, toggleStockAdjustmentForm,
   saveStockAdjustment, toggleNewStockItemForm, saveNewStockItem,
   triggerAppUpdate, exportTransactionsToCSV, backupAllData, restoreData,
-  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, logout,
+  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, logout, syncNow,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   testLocalNotification, toggleNotifications, dismissNotification,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme
