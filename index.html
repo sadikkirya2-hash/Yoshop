@@ -452,12 +452,12 @@
             <div class="input-row"><input type="text" id="companyContact" placeholder="Contact (Phone/Email)"></div>
             <div class="input-row">
               <label for="currency">Currency:</label>
-              <select id="currency" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px;"></select>
+              <select id="currency" class="u-flex-1 u-p-8 u-border u-br-6"></select>
             </div>
             <div class="input-row">
               <label for="defaultMarkup">Default Markup %:</label>
               <input type="number" id="defaultMarkup" placeholder="e.g., 200" min="0" step="1">
-              <span style="font-size: 0.8em; color: #888;">Profit margin to add to ingredient cost.</span>
+              <span class="u-fs-08 u-text-muted">Profit margin to add to ingredient cost.</span>
             </div>
             <div class="input-row">
               <label for="taxRate">Tax Rate %:</label>
@@ -480,7 +480,7 @@
               <input type="text" id="unitNameInput" placeholder="Short Name (e.g., kg)">
               <button class="btn" onclick="addUnit()">Add Unit</button>
             </div>
-            <table style="margin-top: 15px;">
+            <table class="u-mt-15">
               <thead><tr><th>Full Name</th><th>Short Name</th><th style="text-align: right;">Action</th></tr></thead>
               <tbody id="unitListBody"></tbody>
             </table>
@@ -493,7 +493,7 @@
               <input type="text" id="categoryNameInput" placeholder="New Category Name">
               <button class="btn" onclick="addCategory()">Add Category</button>
             </div>
-            <table style="margin-top: 15px;">
+            <table class="u-mt-15">
               <thead><tr><th>Category Name</th><th style="text-align: right;">Action</th></tr></thead>
               <tbody id="categoryListBody"></tbody>
             </table>
@@ -507,7 +507,7 @@
               <input type="text" id="staffRoleInput" placeholder="Staff Role (e.g., Server, Manager)">
               <button class="btn" onclick="addStaff()">Add Staff</button>
             </div>
-            <table style="margin-top: 15px;">
+            <table class="u-mt-15">
               <thead><tr><th>Name</th><th>Role</th><th style="text-align: right;">Action</th></tr></thead>
               <tbody id="staffListBody"></tbody>
             </table>
@@ -516,7 +516,6 @@
         <div class="settings-group">
           <h4 class="settings-header">Customer</h4>
           <div class="settings-content">
-        <div id="addDishFormContainer">
             <div id="addCustomerFormContainer">
               <h5 style="margin-top: 0;">Add/Edit Customer</h5>
               <input type="hidden" id="customerIndex">
@@ -534,11 +533,10 @@
               <h5 style="margin: 0;">All Customers</h5>
               <button class="btn" id="addCustomerBtn" onclick="toggleAddCustomerForm(true)">➕ Add New Customer</button>
             </div>
-            <table style="margin-top: 15px;">
+            <table class="u-mt-15">
               <thead><tr><th>Name</th><th>Contact</th><th>Address</th><th style="text-align: right; white-space: nowrap;">Action</th></tr></thead>
               <tbody id="customerListBody"></tbody>
             </table>
-          </div>
         </div>
         <div class="settings-group">
           <h4 class="settings-header">Barcode Scanner</h4>

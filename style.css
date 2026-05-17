@@ -1242,3 +1242,7 @@
   background: #6f42c1;
   margin-right: 10px;
 }
+
+.u-flex-column-end { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.u-text-break { white-space: normal; word-break: break-word; }
+.u-w-80 { width: 80px; }
