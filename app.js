@@ -145,6 +145,61 @@ async function uploadImage(base64Data, path) {
     }
   }
 
+  function updateOnlineStatus() {
+    let statusEl = document.getElementById('connectivity-status');
+    if (!statusEl) {
+      const header = document.querySelector('header');
+      statusEl = document.createElement('span');
+      statusEl.id = 'connectivity-status';
+      statusEl.style.cssText = 'position: absolute; right: 280px; font-size: 0.4em; padding: 2px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.3s;';
+      header.appendChild(statusEl);
+    }
+
+    if (navigator.onLine) {
+      statusEl.textContent = 'Online';
+      statusEl.style.backgroundColor = 'rgba(40, 167, 69, 0.3)';
+      statusEl.style.color = '#fff';
+      statusEl.title = 'Connected to internet. Cloud sync active.';
+    } else {
+      statusEl.textContent = 'Offline Mode';
+      statusEl.style.backgroundColor = 'rgba(255, 193, 7, 0.5)';
+      statusEl.style.color = '#fff';
+      statusEl.title = 'No internet connection. Working in local-only mode.';
+    }
+  }
+
+  function updateAuthUI(user) {
+    const header = document.querySelector('header');
+    // Remove existing auth container if any
+    const existingAuth = document.getElementById('auth-header-container');
+    if (existingAuth) existingAuth.remove();
+
+    const authContainer = document.createElement('div');
+    authContainer.id = 'auth-header-container';
+    authContainer.style.cssText = 'position: absolute; right: 150px; display: flex; align-items: center; gap: 10px; font-size: 0.6em;';
+
+    if (user) {
+      authContainer.innerHTML = `
+        <div style="text-align: right; line-height: 1.2;">
+          <div style="font-weight: bold;">${user.displayName || 'User'}</div>
+          <button onclick="logout()" style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 0.9em; text-decoration: underline;">Logout</button>
+        </div>
+        <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
+      `;
+      // Hide login overlay if it exists
+      const overlay = document.getElementById('login-overlay');
+      if (overlay) overlay.style.display = 'none';
+    } else {
+      authContainer.innerHTML = `
+        <button onclick="login()" class="btn" style="margin: 0; background: white; color: var(--primary); font-size: 0.9em; padding: 5px 15px;">Login with Google</button>
+      `;
+      // Ensure login overlay is visible
+      showLoginOverlay();
+    }
+
+    header.appendChild(authContainer);
+  }
+
   async function login() {
     const provider = new GoogleAuthProvider();
     try {
@@ -2722,10 +2777,21 @@ async function uploadImage(base64Data, path) {
         loadState('units')
       ]);
 
-      // Wait for auth to initialize before fetching remote data
+      // Initialize Connectivity Status Indicator
+      updateOnlineStatus();
+      window.addEventListener('online', updateOnlineStatus);
+      window.addEventListener('offline', updateOnlineStatus);
+
+      // Assign local settings immediately so login overlay can use them for branding
+      settings = (localData[3] !== null) ? localData[3] : defaultSettings;
+
+      // Wait for authentication state to be determined.
+      // This either hides the splash and shows the POS (if logged in) 
+      // or shows the branded login overlay.
       const remoteData = await new Promise((resolve) => {
         onAuthStateChanged(auth, async (user) => {
           currentUser = user;
+          updateAuthUI(user);
           if (user) {
             try {
               const docSnap = await getDoc(doc(dbFirestore, "users", user.uid, "data", "SHOP_DATA"));
@@ -2763,7 +2829,7 @@ async function uploadImage(base64Data, path) {
         { full: 'Piece', short: 'pc' },
         { full: 'Pint', short: 'pt' },
         { full: 'Pound', short: 'lb' }
-      ];
+      ]);
 
       // Hide splash screen and apply theme as soon as data is ready
       applyTheme();
@@ -2792,7 +2858,7 @@ async function uploadImage(base64Data, path) {
       if (dashboardBtn) showTab('dashboardTab', dashboardBtn);
 
       // Save default data on first run
-      if (!loadedData[0]) {
+      if (!localData[0] && !remoteData) {
         await saveData();
       }
 
@@ -2807,6 +2873,31 @@ async function uploadImage(base64Data, path) {
       console.error("Failed to initialize the application:", error);
       document.body.innerHTML = '<h1>Error</h1><p>Could not initialize the application. Please ensure you are not in private browsing mode and that your browser supports IndexedDB.</p>';
     }
+  }
+
+  function showLoginOverlay() {
+    let overlay = document.getElementById('login-overlay');
+    const logoUrl = sanitizeLogoUrl(settings?.logo);
+    const logoHtml = logoUrl ? `<img src="${logoUrl}" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px; filter: brightness(0) invert(1);">` : '<div style="font-size: 80px; margin-bottom: 20px;">🧾</div>';
+
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'login-overlay';
+      overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: var(--primary); z-index: 10000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        color: white; transition: opacity 0.5s;
+      `;
+      document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      ${logoHtml}
+      <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'Yobill'}</h1>
+      <p style="font-size: 1.2em; margin-bottom: 30px;">Please login to access your POS</p>
+      <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 15px 40px; font-size: 1.2em; font-weight: bold;">Sign In with Google</button>
+    `;
+    overlay.style.display = 'flex';
   }
 
   mainInit();
