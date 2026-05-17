@@ -1184,6 +1184,12 @@
 .u-text-right { text-align: right; }
 .u-text-center { text-align: center; }
 .u-bold { font-weight: bold; }
+.u-nowrap { white-space: nowrap; }
+.u-float-right { float: right; }
+.u-m-0 { margin: 0; }
+.u-w-full { width: 100%; }
+.u-cursor-pointer { cursor: pointer; }
+.u-fs-08 { font-size: 0.8em; }
 
 /* Component Styles */
 .form-panel {

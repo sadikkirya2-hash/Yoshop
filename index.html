@@ -348,30 +348,30 @@
       <!-- Stock -->
       <section id="stockTab">
         <h3>📦 Stock Management</h3>
-        <div class="input-row u-mb-20 u-flex-nowrap" style="max-width: 350px;">
+        <div class="input-row u-mb-20 u-flex-nowrap settings-group">
           <label for="lowStockThreshold">Low Stock:</label>
-          <input type="number" id="lowStockThreshold" placeholder="e.g., 10" min="0" class="u-flex-grow-0" style="width: 100px;">
+          <input type="number" id="lowStockThreshold" placeholder="e.g., 10" min="0" class="u-flex-grow-0 u-flex-basis-100">
           <button class="btn" onclick="saveSettings()">Save</button>
         </div>
         <h5 class="u-mt-20">Low Stock Report</h5>
         <table class="u-mt-10">
           <thead>
-            <tr><th>Item Name</th><th>Category</th><th style="text-align: right;">Current Stock</th></tr>
+            <tr><th>Item Name</th><th>Category</th><th class="u-text-right">Current Stock</th></tr>
           </thead>
           <tbody id="lowStockReportBody"></tbody>
         </table>
         <div id="stockAdjustmentFormContainer" class="form-panel u-mt-20" style="display: none;">
             <input type="hidden" id="stockItemIndex">
-            <h5 id="stockAdjustItemName" style="margin-top: 0;">Adjust Stock for...</h5>
+            <h5 id="stockAdjustItemName" class="u-m-0">Adjust Stock for...</h5>
             <div class="input-row">
                 <input type="number" id="newStockValue" placeholder="Enter new stock quantity" min="0">
                 <button class="btn" onclick="saveStockAdjustment()">Save Stock</button>
                 <button class="btn btn-secondary" onclick="toggleStockAdjustmentForm(false)">Cancel</button>
             </div>
         </div>
-        <h5 class="u-mt-20">All Items Stock <button class="btn" onclick="toggleNewStockItemForm(true)" style="float: right;">➕ Add New Item</button></h5>
+        <h5 class="u-mt-20">All Items Stock <button class="btn u-float-right" onclick="toggleNewStockItemForm(true)">➕ Add New Item</button></h5>
         <div id="newStockItemFormContainer" class="form-panel u-mt-20" style="display: none; padding: 20px;">
-            <h5 style="margin-top: 0;">Add New Stock Item / Ingredient</h5>
+            <h5 class="u-m-0">Add New Stock Item / Ingredient</h5>
             <div class="input-row">
                 <input type="text" id="newStockItemName" placeholder="Item Name" class="u-flex-grow-1">
                 <select id="newStockItemUnit"></select>
@@ -388,16 +388,16 @@
         </div>
         <table class="u-mt-10">
           <thead>
-            <tr><th colspan="6"><input type="text" id="stockSearchInput" onkeyup="renderStockListTable()" placeholder="Search stock items..." style="width: 100%; padding: 8px; margin-bottom: 10px;"></th></tr>
+            <tr><th colspan="6"><input type="text" id="stockSearchInput" onkeyup="renderStockListTable()" placeholder="Search stock items..." class="u-w-full u-mb-15"></th></tr>
           </thead>
           <thead>
             <tr>
               <th>Items</th> <!-- 1 -->
               <th>Unit</th>
-              <th style="text-align: right;">Cost</th> <!-- 2 -->
-              <th style="text-align: right;">Stock</th> <!-- 4 -->
-              <th style="text-align: right;">Total</th> <!-- 5 -->
-              <th style="text-align: right;">Action</th> <!-- 6 -->
+              <th class="u-text-right">Cost</th> <!-- 2 -->
+              <th class="u-text-right">Stock</th> <!-- 4 -->
+              <th class="u-text-right">Total</th> <!-- 5 -->
+              <th class="u-text-right">Action</th> <!-- 6 -->
             </tr>
           </thead>
           <tbody id="stockListBody"></tbody>
