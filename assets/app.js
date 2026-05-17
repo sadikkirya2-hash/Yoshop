@@ -1,4 +1,21 @@
-// Extracted inline JS from index.html
+// Firebase configuration and initialization
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAYvXfCDMzylmevTAoePLW84KhxLHAX9SA",
+  authDomain: "yoshop-b502f.firebaseapp.com",
+  projectId: "yoshop-b502f",
+  storageBucket: "yoshop-b502f.firebasestorage.app",
+  messagingSenderId: "860076092806",
+  appId: "1:860076092806:web:1a83971ae7637ef2cd1007",
+  measurementId: "G-5PETKNBCNF"
+};
+
+// Initialize Firebase
+const firebaseApp = initializeApp(firebaseConfig);
+const analytics = getAnalytics(firebaseApp);
+
 // ===== IndexedDB Setup =====
   let db;
   const DB_NAME = 'posDB';
@@ -3448,3 +3465,32 @@
       }
     }
   }
+
+// Expose functions to global scope for inline event handlers (HTML onclick, etc.)
+Object.assign(window, {
+  // Data and State (Required for inline HTML references)
+  menu, activeOrders, transactions, settings, staff, dishCategories, customers, units,
+  db, CART_ID, analytics, firebaseApp,
+
+  // Functions
+  toggleNav, showTab, renderMenu, addDish, generateRandomBarcode, editDish,
+  addNewRecipeItemFromForm, updateRecipeItemUnit, updateRecipeTotals,
+  previewDishImage, toggleAddDishForm, openBillSplitModal, closeSplitBillModal,
+  addSplitBill, removeSplitBill, moveItemToFirstBill, moveItemToUnassigned,
+  processSplitPayments, addToOrder, decreaseQty, processBill, updatePaymentTotals,
+  toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel,
+  deleteItem, previewOrder, downloadCurrentReceiptAsPDF, shareReceipt,
+  handleServerChange, printReceipt, connectUSBScanner, connectBluetoothScanner,
+  connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
+  directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction,
+  reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff,
+  resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
+  toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme,
+  renderStockListTable, editStockItem, toggleStockAdjustmentForm,
+  saveStockAdjustment, toggleNewStockItemForm, saveNewStockItem,
+  triggerAppUpdate, exportTransactionsToCSV, backupAllData, restoreData,
+  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection,
+  closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
+  testLocalNotification, toggleNotifications, dismissNotification,
+  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme
+});
