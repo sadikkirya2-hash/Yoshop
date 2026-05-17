@@ -29,6 +29,8 @@ console.log("Firebase initialized for project:", firebaseConfig.projectId);
 const storage = getStorage(firebaseApp);
 const auth = getAuth(firebaseApp);
 let currentUser = null;
+let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
+
 let syncFailureCount = 0;
 
 // Helper function to upload images to Firebase Storage
@@ -133,7 +135,7 @@ async function uploadImage(base64Data, path) {
   let printerType = null; // 'USB' or 'BLUETOOTH'
   let units = [];
 
-  async function saveData() {
+  async function saveData(syncToCloud = true) {
     try {
       // Save to local IndexedDB
       await Promise.all([
@@ -147,8 +149,9 @@ async function uploadImage(base64Data, path) {
         saveState('units', units || [])
       ]);
 
-      // Sync to Firebase Firestore if logged in
-      if (currentUser) {
+      // Sync to Firebase Firestore if logged in and initial pull is finished
+      // This guard prevents local defaults from destroying your cloud data (like the logo)
+      if (currentUser && syncToCloud && isInitialLoadComplete) {
         // Prepare data for Firestore. 
         // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
         const shopData = JSON.parse(JSON.stringify({
@@ -369,6 +372,9 @@ async function uploadImage(base64Data, path) {
       case 'settingsTab':
         renderCategoryList();
         renderUnitList();
+        renderStaffList();
+        renderCustomerList();
+        loadSettings();
         break;
       case 'stockTab':
         renderInventoryReport(); // For the low stock report
@@ -2858,6 +2864,81 @@ async function uploadImage(base64Data, path) {
     delete document.getElementById('newStockItemFormContainer').dataset.editingIndex;
   }
 
+  // ===== Real-Time Cloud Sync =====
+  let unsubscribeSync = null;
+
+  /**
+   * Sets up a real-time listener for the user's data in Firestore.
+   * This allows changes from other devices/tabs to appear instantly.
+   */
+  function setupRealTimeSync(uid) {
+    if (unsubscribeSync) unsubscribeSync();
+    
+    unsubscribeSync = onSnapshot(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"), (docSnap) => {
+      if (docSnap.exists()) {
+        // Only update if changes come from the cloud (server)
+        // This prevents the UI from resetting while the user is actively making changes locally
+        if (!docSnap.metadata.hasPendingWrites) {
+          const cloudData = docSnap.data();
+          console.log("Real-time data update received from cloud.");
+          
+          // Update global state
+          menu = cloudData.menu || menu;
+          activeOrders = cloudData.activeOrders || activeOrders;
+          transactions = cloudData.transactions || transactions;
+          settings = cloudData.settings || settings;
+          staff = cloudData.staff || staff;
+          dishCategories = cloudData.dishCategories || dishCategories;
+          customers = cloudData.customers || customers;
+          units = cloudData.units || units;
+
+          // Mark initial load as complete - now it's safe for saveData to push to cloud
+          isInitialLoadComplete = true;
+
+          // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
+          saveData(false); 
+
+          // Refresh the current UI view
+          refreshCurrentView();
+          updateDashboard();
+          applyTheme(); // Ensure theme is updated
+
+          // Visual feedback on the sync button
+          const statusEl = document.getElementById('connectivity-status');
+          if (statusEl && statusEl.classList) {
+            statusEl.classList.add('sync-pulse');
+            setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+          }
+        }
+      } else {
+        // If the document doesn't exist, we mark as complete so the user can create it
+        isInitialLoadComplete = true;
+      }
+    }, (error) => {
+      console.error("Real-time sync error:", error);
+      isInitialLoadComplete = true; // Don't block local work if cloud fails
+    });
+  }
+
+  /**
+   * Re-renders the currently active tab to show fresh data.
+   */
+  function refreshCurrentView() {
+    const activeTab = document.querySelector('section.active');
+    if (!activeTab) return;
+    
+    const renderMap = {
+      'dashboardTab': updateDashboard,
+      'transactionsTab': renderTransactions,
+      'menuTab': renderMenu,
+      'addDishTab': renderDishesTable,
+      'settingsTab': () => { renderCategoryList(); renderUnitList(); renderStaffList(); renderCustomerList(); loadSettings(); },
+      'stockTab': () => { renderInventoryReport(); renderStockListTable(); renderUnitList(); },
+      'reportsTab': () => { populateReportFilters(); renderReport(); }
+    };
+    if (renderMap[activeTab.id]) renderMap[activeTab.id]();
+  }
+
   // ===== Main App Initialization =====
   async function mainInit() {
     try {
@@ -2894,98 +2975,14 @@ async function uploadImage(base64Data, path) {
       // Assign local settings immediately so login overlay can use them for branding
       settings = (localData[3] !== null) ? localData[3] : defaultSettings;
 
-      // Wait for authentication state to be determined.
-      // This either hides the splash and shows the POS (if logged in) 
-      // or shows the branded login overlay.
-      let unsubscribeSync = null;
-
-      function setupRealTimeSync(uid) {
-        if (unsubscribeSync) unsubscribeSync();
-        
-        // The onSnapshot listener provides real-time "Push" updates from the cloud to this device
-        unsubscribeSync = onSnapshot(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"), (docSnap) => {
-          // Only update if changes come from the cloud (not our own pending local writes)
-          if (docSnap.exists() && !docSnap.metadata.hasPendingWrites) {
-            const cloudData = docSnap.data();
-            console.log("Real-time data update received from another device.");
-            
-            // Sync global state variables
-            menu = cloudData.menu || menu;
-            activeOrders = cloudData.activeOrders || activeOrders;
-            transactions = cloudData.transactions || transactions;
-            settings = cloudData.settings || settings;
-            staff = cloudData.staff || staff;
-            dishCategories = cloudData.dishCategories || dishCategories;
-            customers = cloudData.customers || customers;
-            units = cloudData.units || units;
-
-            // Instantly refresh the current view to show the new data
-            refreshCurrentView();
-            
-            const syncBtn = document.getElementById('sync-now-btn');
-            if (syncBtn) {
-              syncBtn.setAttribute('data-tooltip', 'Remote update received: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-            }
-
-            // Visual Pulse Animation
-            const statusEl = document.getElementById('connectivity-status');
-            if (statusEl) {
-              statusEl.classList.add('sync-pulse');
-              setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
-            }
-          }
-        }, (error) => {
-          console.error("Real-time sync error:", error);
-        });
-      }
-
-      function refreshCurrentView() {
-        const activeTab = document.querySelector('section.active');
-        if (!activeTab) return;
-        
-        const renderMap = {
-          'dashboardTab': updateDashboard,
-          'transactionsTab': renderTransactions,
-          'menuTab': renderMenu,
-          'addDishTab': renderDishesTable,
-          'settingsTab': () => { renderCategoryList(); renderUnitList(); renderStaffList(); renderCustomerList(); loadSettings(); },
-          'stockTab': () => { renderInventoryReport(); renderStockListTable(); renderUnitList(); },
-          'reportsTab': () => { populateReportFilters(); renderReport(); }
-        };
-        if (renderMap[activeTab.id]) renderMap[activeTab.id]();
-      }
-
-      const remoteData = await new Promise((resolve) => {
-        onAuthStateChanged(auth, async (user) => {
-          currentUser = user;
-          updateAuthUI(user);
-          if (user) {
-            console.log("Fetching cloud data for UID:", user.uid);
-            try {
-              const docSnap = await getDoc(doc(dbFirestore, "users", user.uid, "data", "SHOP_DATA"));
-              setupRealTimeSync(user.uid);
-              if (docSnap.exists()) return resolve(docSnap.data());
-            } catch (e) {
-              if (e.code === 'failed-precondition' || e.message.includes('not found')) {
-                console.error("CRITICAL: Firestore Database not found or not enabled for project 'yoshop-b502f'.");
-                console.info("Verify your Project ID in Firebase Settings and ensure 'Cloud Firestore' is initialized.");
-              }
-              console.warn("Cloud load failed (Check if Firestore is enabled in Console):", e);
-            }
-          }
-          resolve(null);
-        });
-      });
-
-      // Assign to global variables, using defaults if null
-      menu = (remoteData && remoteData.menu) || localData[0] || defaultMenu;
-      activeOrders = (remoteData && remoteData.activeOrders) || localData[1] || {};
-      transactions = (remoteData && remoteData.transactions) || localData[2] || [];
-      settings = (remoteData && remoteData.settings) || localData[3] || defaultSettings;
-      staff = (remoteData && remoteData.staff) || localData[4] || defaultStaff;
-      dishCategories = (remoteData && remoteData.dishCategories) || localData[5] || defaultDishCategories;
-      customers = (remoteData && remoteData.customers) || localData[6] || [];
-      units = (remoteData && remoteData.units) || localData[7] || [
+      // Populate state from local storage immediately
+      menu = localData[0] || defaultMenu;
+      activeOrders = localData[1] || {};
+      transactions = localData[2] || [];
+      staff = localData[4] || defaultStaff;
+      dishCategories = localData[5] || defaultDishCategories;
+      customers = localData[6] || [];
+      units = localData[7] || [
         { full: 'Bottle', short: 'btl' },
         { full: 'Box', short: 'box' },
         { full: 'Can', short: 'can' },
@@ -3004,20 +3001,31 @@ async function uploadImage(base64Data, path) {
         { full: 'Pound', short: 'lb' }
       ];
 
-      // Hide splash screen and apply theme as soon as data is ready
+      // START UI IMMEDIATELY
       applyTheme();
       handleSplashScreen();
-
-      // Initial render calls
       populateCurrencies();
       renderDishesTable();
       renderMenu();
       updateDashboard();
       loadSettings();
+
+      // Background Cloud Sync
+      onAuthStateChanged(auth, async (user) => {
+        currentUser = user;
+        updateAuthUI(user);
+        if (user) {
+          console.log("Logged in, syncing cloud data in background...");
+          setupRealTimeSync(user.uid);
+        } else {
+          isInitialLoadComplete = true; // Enable saving for local guests
+        }
+      });
+
       renderCategoryList();
       renderInventoryReport();
       renderCustomerList();
-      toggleAddCustomerForm(false); // Ensure form is hidden on load
+      toggleAddCustomerForm(false);
       renderUnitList();
       populateReportFilters();
       populateUnitDropdown();
@@ -3026,18 +3034,6 @@ async function uploadImage(base64Data, path) {
       updateCurrencyDisplay();
       setupSettingsAccordion();
       updatePrinterStatus(false);
-
-      // Ensure dashboard is visible and data is rendered immediately
-      const dashboardBtn = document.querySelector('nav button[onclick*="dashboardTab"]');
-      if (dashboardBtn) {
-        showTab('dashboardTab', dashboardBtn);
-        updateDashboard(); 
-      }
-
-      // Save default data on first run
-      if (!localData[0] && !remoteData) {
-        await saveData();
-      }
 
       // High-Frequency Sync Heartbeat
       // Periodically pushes local data to the cloud to ensure all devices are perfectly aligned.
