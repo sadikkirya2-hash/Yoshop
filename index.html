@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Yobill</title>
+<link rel="icon" type="image/png" href="assets/icons/icon-192x192.png">
+<link rel="canonical" href="https://yobill.netlify.app/">
+<link rel="manifest" href="manifest.json">
+<!-- PWA Meta Tags -->
+<meta name="theme-color" content="#ff6b35"/>
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="loading">
+  <!-- Splash Screen -->
+  <div id="splash-screen">
+    <div class="splash-content">
+      <img src="assets/icons/icon-192x192.png" alt="Yobill Logo" class="splash-logo-img">
+      <p>Welcome to</p>
+      <h1>Yobill</h1>
+    </div>
+  </div>
+
+  <header>
+    <button id="menu-toggle" class="icon-btn" onclick="toggleNav()">&#9776;</button>
+    <!-- Mini Thermal Printer Emoji -->
+    <span class="header-logo">🖨️</span>
+    Yobill
+    <button id="header-printer-status" class="icon-btn" title="Printer Connected">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>
+    </button>
+    <button id="update-notification-btn" class="icon-btn" onclick="toggleNotifications()" title="Notifications">
+      <span>🔔</span>
+      <span id="update-badge"></span>
+    </button>
+    <!-- Notification Dropdown -->
+    <div id="notificationDropdown">
+        <div class="notification-header">
+          <span>Notifications</span>
+          <button onclick="clearAllNotifications()" class="clear-all-btn">Clear All</button>
+        </div>
+        <div id="notificationList">
+            <div class="no-notifications">No notifications</div>
+        </div>
+    </div>
+    <button id="theme-toggle-header" class="icon-btn" onclick="toggleTheme()">
+      <span id="theme-icon"></span>
+    </button>
+  </header>
+
+  <!-- Bill Split Modal -->
+  <div id="billSplitModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content split-modal-content">
+      <h3>Split Bill for Table <span id="splitBillTableId"></span></h3>
+      <div class="split-modal-container">
+        <!-- Unassigned Items Column -->
+        <div id="unassignedColumn">
+          <h5>Unassigned Items</h5>
+          <div id="unassignedItems">
+            <!-- Unassigned items will be injected here -->
+          </div>
+        </div>
+        <!-- Split Bills Columns -->
+        <div id="splitBillsContainer">
+          <!-- Split bill columns will be injected here -->
+        </div>
+      </div>
+      <div class="receipt-actions">
+        <button class="btn" onclick="addSplitBill()">+ Add Person</button>
+        <button class="btn" id="processSplitBtn" onclick="processSplitPayments()" class="process-split-btn">Process Payments</button>
+        <button class="btn" onclick="closeSplitBillModal()" class="cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+  
+
+  <!-- Payment Modal -->
+  <div id="paymentModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content payment-modal-content">
+        <h3>Complete Payment</h3>
+        <div id="paymentDetails">
+            <div class="payment-details-wrapper">
+                <div class="payment-row"><span>Subtotal:</span> <span><span class="currency-symbol">$</span><span id="paymentSubtotal">0.00</span></span></div>
+                <div class="payment-row"><span>Tax:</span> <span><span class="currency-symbol">$</span><span id="paymentTax">0.00</span></span></div>
+                <div class="payment-row payment-discount"><span>Discount:</span> <span>-<span class="currency-symbol">$</span><span id="paymentDiscountDisplay">0.00</span></span></div>
+            </div>
+            <div class="total payment-total">
+                Total Due: <span class="currency-symbol">$</span><span id="paymentTotalDue">0.00</span>
+            </div>
+            <div class="input-row">
+                <label for="discountInput" class="discount-input-wrapper">Discount (<span class="currency-symbol">$</span>):</label>
+                <input type="number" id="discountInput" placeholder="0.00" min="0" step="0.01" oninput="updatePaymentTotals()">
+            </div>
+            <div class="input-row">
+                <label for="paymentMethod" class="payment-method-wrapper">Payment Method:</label>
+                <select id="paymentMethod" onchange="toggleCashPaymentFields()" class="payment-method-select">
+                    <option value="Cash">Cash</option>
+                    <option value="Card">Card</option>
+                    <option value="Mobile">Mobile Payment</option>
+                </select>
+            </div>
+            <div id="cashPaymentFields">
+                <div class="input-row"><label for="amountTendered" class="amount-tendered-wrapper">Amount Tendered:</label><input type="number" id="amountTendered" oninput="calculateChange()" placeholder="0.00" step="0.01"></div>
+                <div class="total change-due">Change Due: <span class="currency-symbol">$</span><span id="changeDue">0.00</span></div>
+            </div>
+        </div>
+        <div id="splitPaymentContainer">
+            <!-- Split payment details will be injected here -->
+        </div>
+        <div class="receipt-actions"><button class="btn" id="confirmPaymentBtn" onclick="finalizePayment()" class="confirm-payment-btn">Confirm Payment</button><button class="btn" onclick="document.getElementById('paymentModal').style.display='none'" class="cancel-btn">Cancel</button></div>
+    </div></div>
+
+  <!-- Camera Scanner Modal -->
+  <div id="cameraScannerModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content camera-modal-content">
+      <h3>Scan Barcode</h3>
+      <div id="reader"></div>
+      <div class="receipt-actions">
+        <button class="btn" onclick="closeCameraScanner()" class="cancel-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Connect Modal -->
+  <div id="mobileConnectModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content mobile-connect-modal-content">
+        <h3>Connect Mobile Scanner</h3>
+        <p>Scan this QR code with your phone to use it as a wireless barcode scanner.</p>
+        <div id="mobileConnectQR" class="mobile-connect-qr"></div>
+        <a id="mobileConnectLink" href="#" target="_blank" class="mobile-connect-link">Direct Link</a>
+        <div class="receipt-actions">
+            <button class="btn" onclick="closeMobileConnectModal()" class="cancel-btn">Close</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- Receipt Modal -->
+  <div id="receiptModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content">
+      <div id="receiptContent" class="receipt-paper">
+        <!-- Receipt content will be injected here -->
+      </div>
+      <div class="receipt-actions">
+        <button class="btn" onclick="downloadCurrentReceiptAsPDF()" class="save-pdf-btn">Save PDF</button>
+        <button class="btn" onclick="shareReceipt()" class="share-btn">Share</button>
+        <button class="btn" onclick="printReceipt()" class="print-btn">Print</button>
+        <button class="btn" onclick="directPrint()" id="directPrintBtn" class="direct-print-btn">Print to Device</button>
+        <button class="btn" onclick="document.getElementById('receiptModal').style.display='none'" class="close-modal-btn">Close</button>
+      </div>
+    </div>
+  </div>
+  <!-- This div is for printing only -->
+  <div id="printArea" class="receipt-print-area"></div>
+
+  <!-- Update Toast Notification -->
+  <div id="updateToast">
+    <span class="update-toast-content">🚀 New update available!</span>
+    <button onclick="triggerAppUpdate()" class="update-now-btn">Update Now</button>
+    <button onclick="document.getElementById('updateToast').style.display='none'" class="update-close-btn">&times;</button>
+  </div>
+
+  <!-- Mobile Scanner UI (Hidden by default, shown only on phone when connected) -->
+  <div id="mobile-scanner-ui">
+    <h2 class="mobile-scanner-title">📱 Mobile Scanner</h2>
+    <p id="ms-status" class="mobile-scanner-status">Connecting...</p>
+    <div id="ms-reader"></div>
+    <div id="scan-feedback">
+        ✅ Scanned
+    </div>
+    <button class="btn" onclick="window.location.href = window.location.pathname" class="exit-scanner-btn">Exit Scanner Mode</button>
+  </div>
+
+  <div class="app-layout">
+    <nav>
+      <button class="active" onclick="showTab('dashboardTab', this)"><span>📊</span><span>Dashboard</span></button>
+      <button onclick="showTab('menuTab', this)"><span>🛒</span><span>Shop</span></button>
+      <button onclick="showTab('addDishTab', this)"><span>🛍️</span><span>Products</span></button>
+      <button onclick="showTab('stockTab', this)"><span>📦</span><span>Stock</span></button>
+      <button onclick="showTab('transactionsTab', this)"><span>🧾</span><span>Sales</span></button>
+      <button onclick="showTab('reportsTab', this)"><span>📈</span><span>Reports</span></button>
+      <button onclick="showTab('settingsTab', this)"><span>⚙️</span><span>Settings</span></button>
+      <button onclick="refreshApp()"><span>🔄</span><span>Refresh</span></button>
+    </nav>
+
+    <main>
+      <!-- Menu -->
+      <section id="menuTab" data-table-id="">
+        <div id="menuHeaderContainer">
+          <div class="menu-header-row">
+            <h3 id="menuTabTitle">Shop</h3>
+          </div>
+          <div id="menuOrderSummary" class="menu-summary">
+              <div class="total">Total: <span class="currency-symbol">$</span> <span id="menuTotal">0.00</span></div>
+              <div>
+                  <button class="btn" onclick="previewOrder()">Preview</button>
+                  <button class="btn btn-success" onclick="processBill()">Checkout</button>
+              </div>
+          </div>
+          <div class="input-row menu-search-row">
+            <select id="categoryFilter" onchange="renderMenu()" title="Filter by Category">
+              <option value="">All Categories</option>
+            </select>
+            <input type="text" id="menuSearch" placeholder="Search for a product..." onkeyup="renderMenu()">
+            <button class="btn camera-scan-btn" onclick="startCameraScan()" title="Scan with Camera">📷</button>
+            <button class="btn manual-barcode-btn" onclick="manualBarcodeInput()" title="Enter Barcode Manually">⌨️</button>
+            <select id="servedBy" onchange="handleServerChange()" title="Sold By">
+              <option value="">Sold By...</option>
+            </select>
+          </div>
+        </div>
+        <div id="menuCategories"></div>
+      </section>
+
+      <!-- Orders -->
+      <section id="ordersTab">
+        <table>
+          <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr></thead>
+          <tbody id="orderList"></tbody>
+          <tfoot>
+            <tr class="total">
+              <td colspan="3" class="orders-table-footer">Total:</td>
+              <td><span class="currency-symbol">$</span><span id="total">0.00</span></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </section>
+
+      <!-- Add Dish -->
+      <section id="addDishTab">
+        <div id="addDishFormContainer">
+            <input type="hidden" id="dishImageBase64">
+            <input type="hidden" id="dishIndex">
+            
+            <!-- Row 1: Basic Info -->
+            <div class="input-row dish-row-basic">
+              <input type="text" id="dishName" list="stockNameList" placeholder="Product Name" style="flex-grow: 2;">
+              <datalist id="stockNameList"></datalist>
+              <div class="barcode-wrapper">
+                <input type="text" id="dishBarcode" placeholder="Barcode/SKU">
+                <button class="btn generate-barcode-btn" onclick="generateRandomBarcode()" title="Generate Random Barcode">🎲</button>
+              </div>
+              <select id="dishCategory" style="flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px;"></select>
+              <input type="file" id="dishImage" accept="image/*" onchange="previewDishImage(this)" style="flex-grow: 1;" title="Product Image">
+              <img id="dishImagePreview" src="https://placehold.co/100" alt="Preview">
+            </div>
+            <!-- Recipe Builder -->
+            <div id="recipeBuilder">
+                <h5 class="recipe-builder-title">Components / Bundle</h5>
+                <div id="recipeItemsContainer" class="recipe-items-container"></div>
+                <div class="input-row">
+                    <select id="newRecipeItemSelect" onchange="updateRecipeItemUnit()" style="flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px;"></select>
+                    <input type="text" id="newRecipeItemUnit" placeholder="Unit" readonly style="flex-grow: 0.5; background: #e9ecef; text-align: center;">
+                    <input type="number" id="newRecipeItemQty" placeholder="Qty" min="0.01" step="0.01" style="flex-grow: 0.5;">
+                    <button class="btn" onclick="addNewRecipeItemFromForm()">+ Add</button>
+                </div>
+            </div>
+
+            <!-- Pricing Calculator -->
+            <div id="pricingCalculator" class="pricing-calculator">
+                <div class="input-row">
+                    <label for="dishSellingPrice" class="pricing-row">Selling:</label>
+                    <input type="number" id="dishSellingPrice" placeholder="0.00" step="0.01" oninput="updateRecipeTotals()" class="selling-price-input">
+                    <label for="dishCostPrice" class="cost-price-label">Total Cost:</label>
+                    <input type="text" id="dishCostPrice" readonly class="cost-price-input">
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="input-row dish-form-actions">
+              <div class="profit-display">Profit: <span class="currency-symbol">$</span><span id="dishProfitValue">0.00</span> | Margin: <span id="dishProfitMargin">0.00</span>%</div>
+              <div>
+                <button class="btn" id="saveDishButton" onclick="addDish(this)">Save</button>
+                <button class="btn btn-secondary" onclick="toggleAddDishForm(false)">Cancel</button>
+              </div>
+            </div>
+        </div>
+
+        <h3>📋 Products List 
+          <button class="btn add-product-header" onclick="toggleAddDishForm(true)">➕ Add New Product</button>
+          <button class="btn print-barcodes-btn" onclick="generateAndPrintBarcodes()">🖨️ Print Barcodes</button>
+        </h3>
+        <div>
+          <table>
+                <thead>
+                    <tr><th>Image</th><th>Product</th><th style="text-align: right;">Cost</th><th style="text-align: right;">Price</th><th style="text-align: right;">Profit</th><th style="text-align: right;">Action</th></tr>
+                </thead>
+                <tbody id="dishesTableBody"></tbody>
+            </table>
+        </div>
+      </section>
+
+      <!-- Dashboard -->
+      <section id="dashboardTab">
+        <h3>📊 Dashboard</h3>
+        <div class="dashboard-grid">
+          <div class="dashboard-card">
+            <h4>Products</h4>
+            <p id="menuCount">0</p>
+          </div>
+          <div class="dashboard-card">
+            <h4>Stock Value</h4>
+            <p><span class="currency-symbol">$</span><span id="stockValue">0.00</span></p>
+          </div>
+          <div class="dashboard-card">
+            <h4>Profit Margin</h4>
+            <p><span id="profitPercentage">0.00</span>%</p>
+          </div>
+          <div class="dashboard-card">
+            <h4>Categories</h4>
+            <p id="uniqueCategoriesCount">0</p>
+          </div>
+          <div class="dashboard-card">
+            <h4>Total Revenue</h4>
+            <p><span class="currency-symbol">$</span><span id="totalRevenue">0.00</span></p>
+          </div>
+          <div class="dashboard-card">
+            <h4>Total Sales</h4>
+            <p id="totalBills">0</p>
+          </div>
+        </div>
+        <div class="charts-container">
+          <div class="chart-wrapper">
+            <canvas id="categoryChart"></canvas>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="bestSellingItemsChart"></canvas>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="dailySalesChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stock -->
+      <section id="stockTab">
+        <h3>📦 Stock Management</h3>
+        <div class="input-row u-mb-20 u-flex-nowrap" style="max-width: 350px;">
+          <label for="lowStockThreshold">Low Stock:</label>
+          <input type="number" id="lowStockThreshold" placeholder="e.g., 10" min="0" class="u-flex-grow-0" style="width: 100px;">
+          <button class="btn" onclick="saveSettings()">Save</button>
+        </div>
+        <h5 class="u-mt-20">Low Stock Report</h5>
+        <table class="u-mt-10">
+          <thead>
+            <tr><th>Item Name</th><th>Category</th><th style="text-align: right;">Current Stock</th></tr>
+          </thead>
+          <tbody id="lowStockReportBody"></tbody>
+        </table>
+        <div id="stockAdjustmentFormContainer" class="form-panel u-mt-20" style="display: none;">
+            <input type="hidden" id="stockItemIndex">
+            <h5 id="stockAdjustItemName" style="margin-top: 0;">Adjust Stock for...</h5>
+            <div class="input-row">
+                <input type="number" id="newStockValue" placeholder="Enter new stock quantity" min="0">
+                <button class="btn" onclick="saveStockAdjustment()">Save Stock</button>
+                <button class="btn btn-secondary" onclick="toggleStockAdjustmentForm(false)">Cancel</button>
+            </div>
+        </div>
+        <h5 class="u-mt-20">All Items Stock <button class="btn" onclick="toggleNewStockItemForm(true)" style="float: right;">➕ Add New Item</button></h5>
+        <div id="newStockItemFormContainer" class="form-panel u-mt-20" style="display: none; padding: 20px;">
+            <h5 style="margin-top: 0;">Add New Stock Item / Ingredient</h5>
+            <div class="input-row">
+                <input type="text" id="newStockItemName" placeholder="Item Name" class="u-flex-grow-1">
+                <select id="newStockItemUnit"></select>
+            </div>
+            <div class="input-row">
+                <input type="number" id="newStockItemCost" placeholder="Cost Price" step="0.01" min="0">
+                <input type="number" id="newStockItemPrice" placeholder="Selling Price" step="0.01" min="0">
+                <input type="number" id="newStockItemStock" placeholder="Initial Stock" min="0">
+            </div>
+            <div class="input-row" style="justify-content: flex-end;">
+                <button class="btn" onclick="saveNewStockItem()">Save Item</button>
+                <button class="btn btn-secondary" onclick="toggleNewStockItemForm(false)">Cancel</button>
+            </div>
+        </div>
+        <table class="u-mt-10">
+          <thead>
+            <tr><th colspan="6"><input type="text" id="stockSearchInput" onkeyup="renderStockListTable()" placeholder="Search stock items..." style="width: 100%; padding: 8px; margin-bottom: 10px;"></th></tr>
+          </thead>
+          <thead>
+            <tr>
+              <th>Items</th> <!-- 1 -->
+              <th>Unit</th>
+              <th style="text-align: right;">Cost</th> <!-- 2 -->
+              <th style="text-align: right;">Stock</th> <!-- 4 -->
+              <th style="text-align: right;">Total</th> <!-- 5 -->
+              <th style="text-align: right;">Action</th> <!-- 6 -->
+            </tr>
+          </thead>
+          <tbody id="stockListBody"></tbody>
+        </table>
+      </section>
+
+      <!-- Transactions -->
+      <section id="transactionsTab">
+        <h3>🧾 Sales History</h3>
+        <div class="input-row u-mb-15">
+          <input type="date" id="transactionFilterDate" onchange="renderTransactions()">
+        </div>
+        <div class="u-overflow-x-auto" id="transactionListContainer">
+          <table>
+            <thead>
+              <tr><th>Date</th><th style="text-align: right;">Total</th><th style="text-align: right;">Action</th></tr>
+            </thead>
+            <tbody id="transactionHistoryBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Reports -->
+      <section id="reportsTab">
+        <h3>📈 Reports</h3>
+        <div class="input-row u-mb-20 report-header-box">
+          <div class="input-row u-flex-nowrap u-flex-grow-1">
+            <select id="reportType" onchange="renderReport()" class="u-flex-basis-150">
+              <option value="salesSummary">Summary</option>
+              <option value="itemSales">Item Report</option>
+              <option value="categorySales">Category Report</option>
+            </select>
+            <input type="date" id="reportDate" onchange="renderReport()" class="u-flex-basis-150">
+          </div>
+          <div class="input-row u-flex-nowrap u-flex-grow-1">
+            <select id="reportStaffFilter" onchange="renderReport()" class="u-flex-basis-150"><option value="">All Staff</option></select>
+            <button class="btn u-flex-grow-1" onclick="renderReport()">Generate</button>
+            <button class="btn btn-primary-blue u-flex-grow-1" onclick="downloadReportPDF()">Download PDF</button>
+          </div>
+        </div>
+        <div id="reportOutput" style="overflow-x: auto;"></div>
+      </section>
+
+      <!-- Settings -->
+      <section id="settingsTab">
+        <h3>⚙️ Settings</h3>
+        <div class="settings-group" id="restaurantDetailsSettings">
+          <h4 class="settings-header" data-content-class="center-content">Restaurant Details</h4>
+          <div class="settings-content">
+            <div class="input-row"><input type="text" id="companyName" placeholder="Company Name"></div>
+            <div class="input-row"><input type="text" id="companyAddress" placeholder="Address"></div>
+            <div class="input-row"><input type="text" id="companyContact" placeholder="Contact (Phone/Email)"></div>
+            <div class="input-row">
+              <label for="currency">Currency:</label>
+              <select id="currency" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px;"></select>
+            </div>
+            <div class="input-row">
+              <label for="defaultMarkup">Default Markup %:</label>
+              <input type="number" id="defaultMarkup" placeholder="e.g., 200" min="0" step="1">
+              <span style="font-size: 0.8em; color: #888;">Profit margin to add to ingredient cost.</span>
+            </div>
+            <div class="input-row">
+              <label for="taxRate">Tax Rate %:</label>
+              <input type="number" id="taxRate" placeholder="e.g., 10" min="0" step="0.1">
+            </div>
+            <div class="input-row">
+              <label for="companyLogo">Logo:</label>
+              <input type="file" id="companyLogo" accept="image/*" onchange="previewLogo(this)">
+              <img id="logoPreview" src="" alt="Logo Preview" style="display: none;">
+            </div>
+            <button class="btn" onclick="saveSettings()">Save Settings</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Unit</h4>
+          <div class="settings-content">
+            <p>Manage the units of measurement for your inventory items.</p>
+            <div class="input-row">
+              <input type="text" id="unitFullNameInput" placeholder="Full Name (e.g., Kilogram)">
+              <input type="text" id="unitNameInput" placeholder="Short Name (e.g., kg)">
+              <button class="btn" onclick="addUnit()">Add Unit</button>
+            </div>
+            <table style="margin-top: 15px;">
+              <thead><tr><th>Full Name</th><th>Short Name</th><th style="text-align: right;">Action</th></tr></thead>
+              <tbody id="unitListBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Category</h4>
+          <div class="settings-content">
+            <div class="input-row">
+              <input type="text" id="categoryNameInput" placeholder="New Category Name">
+              <button class="btn" onclick="addCategory()">Add Category</button>
+            </div>
+            <table style="margin-top: 15px;">
+              <thead><tr><th>Category Name</th><th style="text-align: right;">Action</th></tr></thead>
+              <tbody id="categoryListBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Staff</h4>
+          <div class="settings-content">
+            <div class="input-row">
+              <input type="text" id="staffNameInput" placeholder="Staff Name">
+              <input type="text" id="staffRoleInput" placeholder="Staff Role (e.g., Server, Manager)">
+              <button class="btn" onclick="addStaff()">Add Staff</button>
+            </div>
+            <table style="margin-top: 15px;">
+              <thead><tr><th>Name</th><th>Role</th><th style="text-align: right;">Action</th></tr></thead>
+              <tbody id="staffListBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Customer</h4>
+          <div class="settings-content">
+        <div id="addDishFormContainer">
+            <div id="addCustomerFormContainer">
+              <h5 style="margin-top: 0;">Add/Edit Customer</h5>
+              <input type="hidden" id="customerIndex">
+              <div class="input-row">
+                  <input type="text" id="customerNameInput" placeholder="Customer Name">
+                  <input type="text" id="customerContactInput" placeholder="Contact (Phone/Email)">
+              </div>
+              <div class="input-row"><input type="text" id="customerAddressInput" placeholder="Address"></div>
+              <div class="input-row" style="justify-content: flex-end;">
+                  <button class="btn" id="saveCustomerBtn" onclick="addCustomer()">Save Customer</button>
+                  <button class="btn" onclick="toggleAddCustomerForm(false)" style="background-color: #6c757d;">Cancel</button>
+              </div>
+            </div>
+            <div id="customerListHeader">
+              <h5 style="margin: 0;">All Customers</h5>
+              <button class="btn" id="addCustomerBtn" onclick="toggleAddCustomerForm(true)">➕ Add New Customer</button>
+            </div>
+            <table style="margin-top: 15px;">
+              <thead><tr><th>Name</th><th>Contact</th><th>Address</th><th style="text-align: right; white-space: nowrap;">Action</th></tr></thead>
+              <tbody id="customerListBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Barcode Scanner</h4>
+          <div class="settings-content">
+            <p>Connect your Wireless, Bluetooth, or USB scanner to your device. Most scanners act as a keyboard (HID mode). Click the box below and scan a code to test.</p>
+            <div class="input-row">
+              <button class="btn" onclick="connectBluetoothScanner()">Scan Bluetooth</button>
+              <button class="btn" onclick="connectUSBScanner()">Scan USB/Wireless</button>
+              <button class="btn" onclick="startMobileConnection()" style="background: #6f42c1;">📱 Connect Phone</button>
+            </div>
+            <div style="margin-top: 10px; margin-bottom: 10px;"><strong>Status:</strong> <span id="scannerConnectionStatus">Ready (HID Mode)</span> <span id="mobileScannerStatus" style="margin-left: 10px; font-weight: bold;"></span></div>
+            <div class="input-row">
+              <input type="text" id="scannerTestInput" placeholder="Click here and scan to test connection..." onfocus="this.value=''">
+            </div>
+            <div style="margin-top: 10px;">
+              <strong>Last Scanned:</strong> <span id="lastScannedCode" style="font-family: monospace; font-weight: bold; color: var(--primary);">None</span>
+            </div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Printer Settings</h4>
+          <div class="settings-content">
+            <p>Connect to a Bluetooth or USB thermal printer (ESC/POS compatible). Requires a compatible browser like Chrome.</p>
+            <div class="input-row">
+              <button class="btn" onclick="connectBluetoothPrinter()">Connect Bluetooth Printer</button>
+              <button class="btn" onclick="connectUSBPrinter()">Connect USB Printer</button>
+            </div>
+            <div style="margin-top: 10px;"><strong>Status:</strong> <span id="printerStatus">Not Connected</span></div>
+            <div style="margin-top: 10px;">
+              <button class="btn" onclick="testPrint()" id="testPrintBtn" style="display: none; background: #17a2b8;">Test Print</button>
+              <button class="btn" onclick="disconnectPrinter()" id="disconnectPrinterBtn" style="display: none; background: #6c757d;">Disconnect</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Notifications</h4>
+          <div class="settings-content">
+            <p>Enable push notifications to receive alerts even when the app is closed.</p>
+            <div class="input-row">
+              <button class="btn" id="enableNotifBtn" onclick="requestNotificationPermission()">Enable Notifications</button>
+              <button class="btn" onclick="testLocalNotification()">Test Notification</button>
+            </div>
+            <div style="margin-top: 10px;"><strong>Status:</strong> <span id="notificationStatus">Checking...</span></div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4 class="settings-header">Application Data</h4>
+          <div class="settings-content">
+            <p>Warning: This will permanently delete all menu items and order history.</p>
+            <div class="input-row" style="justify-content: center; align-items: center;">
+              <button class="btn" id="settingsUpdateBtn" onclick="triggerAppUpdate()" style="background: #ffc107; display: none; color: #000;">✨ Update App</button>
+              <button class="btn" id="installAppBtn" style="background: #007bff;">Install App</button>
+              <button class="btn" onclick="exportTransactionsToCSV()" style="background: #007bff;">Export CSV</button>
+              <button class="btn" onclick="backupAllData()" style="background: #17a2b8;">Backup JSON</button>
+              <input type="file" id="restoreFile" accept=".json" style="flex-grow: 0;">
+              <button class="btn" onclick="restoreData()" style="background: #28a745;">Restore</button>
+              <button class="btn" onclick="resetApp()" style="background: #dc3545;">Reset App</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script src="app.js"></script>
+</body>
