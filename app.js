@@ -1,6 +1,9 @@
 // Firebase configuration and initialization
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAYvXfCDMzylmevTAoePLW84KhxLHAX9SA",
@@ -15,6 +18,24 @@ const firebaseConfig = {
 // Initialize Firebase
 const firebaseApp = initializeApp(firebaseConfig);
 const analytics = getAnalytics(firebaseApp);
+const dbFirestore = getFirestore(firebaseApp);
+const storage = getStorage(firebaseApp);
+const auth = getAuth(firebaseApp);
+let currentUser = null;
+
+// Helper function to upload images to Firebase Storage
+async function uploadImage(base64Data, path) {
+  try {
+    if (!base64Data || !base64Data.startsWith('data:image')) return base64Data;
+    const userPath = currentUser ? `users/${currentUser.uid}/${path}` : `public/${path}`;
+    const storageRef = ref(storage, userPath);
+    await uploadString(storageRef, base64Data, 'data_url');
+    return await getDownloadURL(storageRef);
+  } catch (error) {
+    console.error("Image upload failed:", error);
+    return base64Data; // Return original (likely placeholder) on failure
+  }
+}
 
 // ===== IndexedDB Setup =====
   let db;
@@ -97,6 +118,7 @@ const analytics = getAnalytics(firebaseApp);
 
   async function saveData() {
     try {
+      // Save to local IndexedDB
       await Promise.all([
         saveState('menu', menu),
         saveState('activeOrders', activeOrders),
@@ -107,9 +129,37 @@ const analytics = getAnalytics(firebaseApp);
         saveState('customers', customers),
         saveState('units', units)
       ]);
+
+      // Sync to Firebase Firestore if logged in
+      if (currentUser) {
+        const shopData = {
+          menu, activeOrders, transactions, settings, staff, 
+          dishCategories, customers, units,
+          lastUpdated: new Date().toISOString()
+        };
+        await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData);
+      }
     } catch (error) {
       console.error("Failed to save data to IndexedDB:", error);
-      alert("Error: Could not save data. Your changes might not persist.");
+      // Silent failure for cloud sync to allow offline usage
+    }
+  }
+
+  async function login() {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      location.reload(); 
+    } catch (error) {
+      console.error("Login failed:", error);
+      alert("Login failed: " + error.message);
+    }
+  }
+
+  async function logout() {
+    if (confirm("Are you sure you want to log out?")) {
+      await signOut(auth);
+      location.reload();
     }
   }
 
@@ -290,9 +340,13 @@ const analytics = getAnalytics(firebaseApp);
     const price = parseFloat(document.getElementById('dishSellingPrice').value) || 0;
 
     try {
-      // Use the image from the hidden input (populated by previewDishImage or editDish)
-      const image = document.getElementById('dishImageBase64').value || "https://placehold.co/100";
+      let image = document.getElementById('dishImageBase64').value || "https://placehold.co/100";
       const dishIndex = document.getElementById('dishIndex').value;
+
+      // If image is local Base64, upload to Fire Storage
+      if (image.startsWith('data:image')) {
+        image = await uploadImage(image, `dishes/${Date.now()}.jpg`);
+      }
 
       if (dishIndex !== '') {
         // It's an update
@@ -1875,7 +1929,8 @@ const analytics = getAnalytics(firebaseApp);
 
     const logoFile = document.getElementById('companyLogo').files[0];
     if (logoFile) {
-      settings.logo = await toBase64(logoFile);
+      const base64Logo = await toBase64(logoFile);
+      settings.logo = await uploadImage(base64Logo, 'branding/logo.jpg');
     }
 
     saveData();
@@ -2655,8 +2710,8 @@ const analytics = getAnalytics(firebaseApp);
         console.log(`Persisted storage granted: ${isPersisted}`);
       }
 
-      // Load all data from IndexedDB
-      const loadedData = await Promise.all([
+      // Load data from local IndexedDB
+      const localData = await Promise.all([
         loadState('menu'),
         loadState('activeOrders'),
         loadState('transactions'),
@@ -2667,15 +2722,31 @@ const analytics = getAnalytics(firebaseApp);
         loadState('units')
       ]);
 
+      // Wait for auth to initialize before fetching remote data
+      const remoteData = await new Promise((resolve) => {
+        onAuthStateChanged(auth, async (user) => {
+          currentUser = user;
+          if (user) {
+            try {
+              const docSnap = await getDoc(doc(dbFirestore, "users", user.uid, "data", "SHOP_DATA"));
+              if (docSnap.exists()) return resolve(docSnap.data());
+            } catch (e) {
+              console.warn("Cloud load failed, using local.");
+            }
+          }
+          resolve(null);
+        });
+      });
+
       // Assign to global variables, using defaults if null
-      menu = loadedData[0] !== null ? loadedData[0] : defaultMenu;
-      activeOrders = loadedData[1] !== null ? loadedData[1] : {};
-      transactions = loadedData[2] !== null ? loadedData[2] : [];
-      settings = loadedData[3] !== null ? loadedData[3] : defaultSettings;
-      staff = loadedData[4] !== null ? loadedData[4] : defaultStaff;
-      dishCategories = loadedData[5] !== null ? loadedData[5] : defaultDishCategories;
-      customers = loadedData[6] !== null ? loadedData[6] : [];
-      units = loadedData[7] !== null ? loadedData[7] : [
+      menu = (remoteData && remoteData.menu) || (localData[0] !== null ? localData[0] : defaultMenu);
+      activeOrders = (remoteData && remoteData.activeOrders) || (localData[1] !== null ? localData[1] : {});
+      transactions = (remoteData && remoteData.transactions) || (localData[2] !== null ? localData[2] : []);
+      settings = (remoteData && remoteData.settings) || (localData[3] !== null ? localData[3] : defaultSettings);
+      staff = (remoteData && remoteData.staff) || (localData[4] !== null ? localData[4] : defaultStaff);
+      dishCategories = (remoteData && remoteData.dishCategories) || (localData[5] !== null ? localData[5] : defaultDishCategories);
+      customers = (remoteData && remoteData.customers) || (localData[6] !== null ? localData[6] : []);
+      units = (remoteData && remoteData.units) || (localData[7] !== null ? localData[7] : [
         { full: 'Bottle', short: 'btl' },
         { full: 'Box', short: 'box' },
         { full: 'Can', short: 'can' },
@@ -3469,7 +3540,7 @@ const analytics = getAnalytics(firebaseApp);
 // Expose functions to global scope for inline event handlers (HTML onclick, etc.)
 Object.assign(window, {
   // Data and State (Required for inline HTML references)
-  menu, activeOrders, transactions, settings, staff, dishCategories, customers, units,
+  menu, activeOrders, transactions, settings, staff, dishCategories, customers, units, auth, currentUser,
   db, CART_ID, analytics, firebaseApp,
 
   // Functions
@@ -3489,7 +3560,7 @@ Object.assign(window, {
   renderStockListTable, editStockItem, toggleStockAdjustmentForm,
   saveStockAdjustment, toggleNewStockItemForm, saveNewStockItem,
   triggerAppUpdate, exportTransactionsToCSV, backupAllData, restoreData,
-  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection,
+  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, logout,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   testLocalNotification, toggleNotifications, dismissNotification,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme

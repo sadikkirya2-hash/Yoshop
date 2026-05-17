@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yobill-v12';
+const CACHE_NAME = 'yobill-v14';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -7,14 +7,16 @@ const urlsToCache = [
   '/style.css',
   '/assets/icons/icon-192x192.png',
   '/assets/icons/icon-512x512.png',
-  '/assets/icons/apple-touch-icon.png',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
   'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js',
   'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js',
-  'https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js'
+  'https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js',
+  'https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js',
+  'https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js',
+  'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js'
 ];
 
 self.addEventListener('install', (event) => {
