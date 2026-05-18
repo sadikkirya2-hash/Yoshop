@@ -53,7 +53,16 @@ const MIN_SYNC_INTERVAL = 500; // Minimum 500ms between syncs to respect Firebas
 async function uploadImage(base64Data, path) {
   try {
     if (!base64Data || !base64Data.startsWith('data:image')) return base64Data;
-    const userPath = currentUser ? `users/${currentUser.uid}/${path}` : `public/${path}`;
+    let userIdentifier = 'anonymous'; // Default for public uploads
+    if (currentUser) {
+      if (currentUser.email) {
+        userIdentifier = currentUser.email;
+      } else {
+        console.warn("currentUser.email is missing, falling back to currentUser.uid for storage path.");
+        userIdentifier = currentUser.uid; // Fallback to UID if email is missing
+      }
+    }
+    const userPath = `users/${userIdentifier}/${path}`;
     const storageRef = ref(storage, userPath);
     await uploadString(storageRef, base64Data, 'data_url');
     return await getDownloadURL(storageRef);
