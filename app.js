@@ -19,10 +19,16 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const analytics = getAnalytics(firebaseApp);
 
-// Use initializeFirestore to be explicit about the database instance
-const dbFirestore = initializeFirestore(firebaseApp, {
-  databaseId: '(default)'
-});
+// Initialize Firestore - use default database
+// Avoid specifying databaseId explicitly as it can cause compatibility issues
+let dbFirestore;
+try {
+  dbFirestore = getFirestore(firebaseApp);
+  console.log("Firestore initialized successfully");
+} catch (error) {
+  console.warn("Firestore initialization warning (will retry on demand):", error.message);
+  // Firestore will be re-initialized on demand if needed
+}
 
 console.log("Firebase initialized for project:", firebaseConfig.projectId);
 
@@ -151,34 +157,39 @@ async function uploadImage(base64Data, path) {
 
       // Sync to Firebase Firestore if logged in and initial pull is finished
       // This guard prevents local defaults from destroying your cloud data (like the logo)
-      if (currentUser && syncToCloud && isInitialLoadComplete) {
-        // Prepare data for Firestore. 
-        // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
-        const shopData = JSON.parse(JSON.stringify({
-          menu: menu || [],
-          activeOrders: activeOrders || {},
-          transactions: transactions || [],
-          settings: settings || defaultSettings,
-          staff: staff || [],
-          dishCategories: dishCategories || [],
-          customers: customers || [],
-          units: units || [],
-          lastUpdated: new Date().toISOString()
-        }));
+      if (currentUser && syncToCloud && isInitialLoadComplete && dbFirestore) {
+        try {
+          // Prepare data for Firestore. 
+          // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
+          const shopData = JSON.parse(JSON.stringify({
+            menu: menu || [],
+            activeOrders: activeOrders || {},
+            transactions: transactions || [],
+            settings: settings || defaultSettings,
+            staff: staff || [],
+            dishCategories: dishCategories || [],
+            customers: customers || [],
+            units: units || [],
+            lastUpdated: new Date().toISOString()
+          }));
 
-        // If we have many consecutive failures, stop trying until manual sync or reload
-        if (syncFailureCount > 5) {
-          console.warn("Sync suspended due to repeated failures. Check Firebase Console configuration.");
-          return;
-        }
+          // If we have many consecutive failures, stop trying until manual sync or reload
+          if (syncFailureCount > 5) {
+            console.warn("Sync suspended due to repeated failures. Check Firebase Console configuration.");
+            return;
+          }
 
-        await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData);
-        syncFailureCount = 0; // Reset on success
+          await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData);
+          syncFailureCount = 0; // Reset on success
 
-        // Update Last Synced UI Tooltip
-        const syncBtn = document.getElementById('sync-now-btn');
-        if (syncBtn) {
-          syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+          // Update Last Synced UI Tooltip
+          const syncBtn = document.getElementById('sync-now-btn');
+          if (syncBtn) {
+            syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+          }
+        } catch (firestoreError) {
+          console.warn("Firestore sync error (continuing in offline mode):", firestoreError.message);
+          syncFailureCount++;
         }
       }
       updateOnlineStatus();
@@ -1921,8 +1932,10 @@ async function uploadImage(base64Data, path) {
   let dailySalesChartInstance;
 
   function updateDashboard() {
-    // FIX: Safety check to prevent TypeError if menu/transactions are not yet defined
-    if (!menu || !transactions) return;
+    // Initialize with defaults even if data is not yet loaded
+    // This ensures the dashboard always shows cards with 0 values
+    if (!menu) menu = [];
+    if (!transactions) transactions = [];
 
     // Filter for sellable dishes (items with a recipe) to ensure dashboard reflects the menu, not raw inventory.
     const sellableDishes = menu.filter(item => item.recipe && item.recipe.length > 0);
@@ -1935,12 +1948,12 @@ async function uploadImage(base64Data, path) {
       .reduce((sum, item) => sum + (item.stock * (item.costPrice || 0)), 0);
 
     // Calculate total revenue and total cost of goods sold (COGS) from all transactions
-    const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0);
+    const totalRevenue = transactions.reduce((sum, t) => sum + (t.total || 0), 0);
     const totalCost = transactions.reduce((sum, t) => {
-        const transactionCost = t.items.reduce((itemSum, item) => {
+        const transactionCost = (t.items || []).reduce((itemSum, item) => {
             const dish = menu.find(d => d.name === item.name);
             // Use the costPrice stored on the dish, which is calculated from its recipe
-            return itemSum + ((dish ? dish.costPrice : 0) * item.qty);
+            return itemSum + ((dish ? dish.costPrice : 0) * (item.qty || 0));
         }, 0);
         return sum + transactionCost;
     }, 0);
@@ -1948,24 +1961,35 @@ async function uploadImage(base64Data, path) {
     const profitMargin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
     const totalBills = transactions.length;
 
+    // Always update dashboard cards (even with 0 values)
     document.getElementById('stockValue').textContent = formatCurrency(totalStockValue);
     document.getElementById('profitPercentage').textContent = profitMargin.toFixed(2);
     document.getElementById('totalRevenue').textContent = formatCurrency(totalRevenue);
     document.getElementById('totalBills').textContent = totalBills;
     
     updateCurrencyDisplay();
-    renderDashboardChart();
-    renderBestSellingItemsChart();
-    renderDailySalesChart();
+    
+    // Render charts - they will show empty/zero state if no data
+    try {
+      renderDashboardChart();
+      renderBestSellingItemsChart();
+      renderDailySalesChart();
+    } catch (error) {
+      console.error('Error rendering dashboard charts:', error);
+    }
   }
 
   function renderBestSellingItemsChart() {
     if (typeof Chart === 'undefined') return;
     const ctx = document.getElementById('bestSellingItemsChart').getContext('2d');
-    const itemSales = transactions.flatMap(t => t.items).reduce((acc, item) => {
-      acc[item.name] = (acc[item.name] || 0) + item.qty;
-      return acc;
-    }, {});
+    
+    // Safely handle empty transactions
+    const itemSales = (transactions && transactions.length > 0) 
+      ? transactions.flatMap(t => t.items || []).reduce((acc, item) => {
+          acc[item.name] = (acc[item.name] || 0) + (item.qty || 0);
+          return acc;
+        }, {})
+      : {};
 
     const sortedItems = Object.entries(itemSales).sort(([, a], [, b]) => b - a).slice(0, 5);
     const labels = sortedItems.map(([name]) => name);
@@ -1975,13 +1999,14 @@ async function uploadImage(base64Data, path) {
       bestSellingItemsChartInstance.destroy();
     }
 
+    // Always render chart, even with empty data (shows zero state)
     bestSellingItemsChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
+        labels: labels.length > 0 ? labels : ['No data yet'],
         datasets: [{
           label: 'Top 5 Best-Selling Items',
-          data: data,
+          data: data.length > 0 ? data : [0],
           backgroundColor: '#3d5a80',
         }]
       },
@@ -1993,6 +2018,9 @@ async function uploadImage(base64Data, path) {
           title: {
             display: true,
             text: 'Top 5 Best-Selling Items'
+          },
+          tooltip: {
+            enabled: data.length > 0
           }
         }
       }
@@ -2002,11 +2030,15 @@ async function uploadImage(base64Data, path) {
   function renderDailySalesChart() {
     if (typeof Chart === 'undefined') return;
     const ctx = document.getElementById('dailySalesChart').getContext('2d');
-    const salesByDay = transactions.reduce((acc, t) => {
-      const date = new Date(t.date).toLocaleDateString();
-      acc[date] = (acc[date] || 0) + t.total;
-      return acc;
-    }, {});
+    
+    // Safely handle empty transactions
+    const salesByDay = (transactions && transactions.length > 0)
+      ? transactions.reduce((acc, t) => {
+          const date = new Date(t.date).toLocaleDateString();
+          acc[date] = (acc[date] || 0) + (t.total || 0);
+          return acc;
+        }, {})
+      : {};
 
     const labels = Object.keys(salesByDay).reverse();
     const data = Object.values(salesByDay).reverse();
@@ -2015,11 +2047,12 @@ async function uploadImage(base64Data, path) {
       dailySalesChartInstance.destroy();
     }
 
+    // Always render chart, even with empty data (shows zero state)
     dailySalesChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
-        datasets: [{ label: 'Daily Sales', data: data, backgroundColor: '#ff6b35' }]
+        labels: labels.length > 0 ? labels : ['No data yet'],
+        datasets: [{ label: 'Daily Sales', data: data.length > 0 ? data : [0], backgroundColor: '#ff6b35' }]
       },
       options: {
         scales: { y: { beginAtZero: true } },
@@ -2028,6 +2061,9 @@ async function uploadImage(base64Data, path) {
           title: {
             display: true,
             text: 'Daily Sales'
+          },
+          tooltip: {
+            enabled: data.length > 0
           }
         }
       }
@@ -2038,12 +2074,15 @@ async function uploadImage(base64Data, path) {
     const ctx = document.getElementById('categoryChart').getContext('2d');
 
     // Only count items that have a category assigned.
-    const categoryCounts = menu.filter(dish => dish.category).reduce((acc, dish) => {
-      if (dish.category) {
-        acc[dish.category] = (acc[dish.category] || 0) + 1;
-      }
-      return acc;
-    }, {});
+    // Safely handle when menu is empty or not initialized
+    const categoryCounts = (menu && menu.length > 0)
+      ? menu.filter(dish => dish.category).reduce((acc, dish) => {
+          if (dish.category) {
+            acc[dish.category] = (acc[dish.category] || 0) + 1;
+          }
+          return acc;
+        }, {})
+      : {};
 
     const labels = Object.keys(categoryCounts);
     const data = Object.values(categoryCounts);
@@ -2052,13 +2091,14 @@ async function uploadImage(base64Data, path) {
       categoryChartInstance.destroy();
     }
 
+    // Always render chart, even with empty data (shows zero state)
     categoryChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: labels,
+        labels: labels.length > 0 ? labels : ['No data yet'],
         datasets: [{
           label: 'Products by Category',
-          data: data,
+          data: data.length > 0 ? data : [0],
           backgroundColor: ['#ff6b35', '#f7c59f', '#7dcdb8', '#3d5a80', '#98c1d9'],
         }]
       },
@@ -2075,6 +2115,9 @@ async function uploadImage(base64Data, path) {
           title: {
             display: true,
             text: 'Products by Category'
+          },
+          tooltip: {
+            enabled: data.length > 0
           }
         }
       }
@@ -2872,52 +2915,63 @@ async function uploadImage(base64Data, path) {
    * This allows changes from other devices/tabs to appear instantly.
    */
   function setupRealTimeSync(uid) {
+    if (!dbFirestore) {
+      console.warn("Firestore not initialized, skipping real-time sync");
+      isInitialLoadComplete = true; // Allow local-only operation
+      return;
+    }
+
     if (unsubscribeSync) unsubscribeSync();
     
-    unsubscribeSync = onSnapshot(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"), (docSnap) => {
-      if (docSnap.exists()) {
-        // Only update if changes come from the cloud (server)
-        // This prevents the UI from resetting while the user is actively making changes locally
-        if (!docSnap.metadata.hasPendingWrites) {
-          const cloudData = docSnap.data();
-          console.log("Real-time data update received from cloud.");
-          
-          // Update global state
-          menu = cloudData.menu || menu;
-          activeOrders = cloudData.activeOrders || activeOrders;
-          transactions = cloudData.transactions || transactions;
-          settings = cloudData.settings || settings;
-          staff = cloudData.staff || staff;
-          dishCategories = cloudData.dishCategories || dishCategories;
-          customers = cloudData.customers || customers;
-          units = cloudData.units || units;
+    try {
+      unsubscribeSync = onSnapshot(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"), (docSnap) => {
+        if (docSnap.exists()) {
+          // Only update if changes come from the cloud (server)
+          // This prevents the UI from resetting while the user is actively making changes locally
+          if (!docSnap.metadata.hasPendingWrites) {
+            const cloudData = docSnap.data();
+            console.log("Real-time data update received from cloud.");
+            
+            // Update global state
+            menu = cloudData.menu || menu;
+            activeOrders = cloudData.activeOrders || activeOrders;
+            transactions = cloudData.transactions || transactions;
+            settings = cloudData.settings || settings;
+            staff = cloudData.staff || staff;
+            dishCategories = cloudData.dishCategories || dishCategories;
+            customers = cloudData.customers || customers;
+            units = cloudData.units || units;
 
-          // Mark initial load as complete - now it's safe for saveData to push to cloud
-          isInitialLoadComplete = true;
+            // Mark initial load as complete - now it's safe for saveData to push to cloud
+            isInitialLoadComplete = true;
 
-          // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
-          saveData(false); 
+            // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
+            saveData(false); 
 
-          // Refresh the current UI view
-          refreshCurrentView();
-          updateDashboard();
-          applyTheme(); // Ensure theme is updated
+            // Refresh the current UI view
+            refreshCurrentView();
+            updateDashboard();
+            applyTheme(); // Ensure theme is updated
 
-          // Visual feedback on the sync button
-          const statusEl = document.getElementById('connectivity-status');
-          if (statusEl && statusEl.classList) {
-            statusEl.classList.add('sync-pulse');
-            setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+            // Visual feedback on the sync button
+            const statusEl = document.getElementById('connectivity-status');
+            if (statusEl && statusEl.classList) {
+              statusEl.classList.add('sync-pulse');
+              setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+            }
           }
+        } else {
+          // If the document doesn't exist, we mark as complete so the user can create it
+          isInitialLoadComplete = true;
         }
-      } else {
-        // If the document doesn't exist, we mark as complete so the user can create it
-        isInitialLoadComplete = true;
-      }
-    }, (error) => {
-      console.error("Real-time sync error:", error);
-      isInitialLoadComplete = true; // Don't block local work if cloud fails
-    });
+      }, (error) => {
+        console.warn("Real-time sync listener error (continuing in offline mode):", error.message);
+        isInitialLoadComplete = true; // Don't block local work if cloud fails
+      });
+    } catch (error) {
+      console.warn("Error setting up real-time sync (continuing in offline mode):", error.message);
+      isInitialLoadComplete = true; // Allow offline operation
+    }
   }
 
   /**
@@ -3005,9 +3059,13 @@ async function uploadImage(base64Data, path) {
       applyTheme();
       handleSplashScreen();
       populateCurrencies();
+      
+      // CRITICAL: Render dashboard FIRST while other tabs are hidden
+      // This ensures charts initialize on visible canvas elements
+      updateDashboard();
+      
       renderDishesTable();
       renderMenu();
-      updateDashboard();
       loadSettings();
 
       // Background Cloud Sync
