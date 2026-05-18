@@ -1253,8 +1253,10 @@
   color: white;
   cursor: pointer;
   padding: 4px;
-  display: flex;
+  display: flex; /* Adjusted font size for better appearance */
   align-items: center;
+  font-size: 1.2em;
+  font-weight: bold;
   border-radius: 50%;
   transition: background 0.2s;
 }

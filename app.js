@@ -248,6 +248,13 @@ async function uploadImage(base64Data, path) {
             }
             console.log('[SYNC] ✅ Cloud data synced successfully');
           } catch (firestoreError) {
+            // Add pulse animation to connectivity status on successful sync
+            const statusEl = document.getElementById('connectivity-status');
+            if (statusEl) {
+                statusEl.classList.add('sync-pulse');
+                setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+            }
+
             syncFailureCount++;
             handleFirebaseError(firestoreError, "Firestore Sync");
           } finally {
@@ -286,12 +293,12 @@ async function uploadImage(base64Data, path) {
     if (!container) {
       const header = document.querySelector('header');
       container = document.createElement('div');
-      container.id = 'connectivity-container';
-      container.style.cssText = 'position: absolute; right: 280px; display: flex; align-items: center; gap: 8px; font-size: 0.4em;';
+      container.id = 'connectivity-container'; // Adjusted right position
+      container.style.cssText = 'position: absolute; right: 175px; display: flex; align-items: center; gap: 8px; font-size: 0.6em;';
       
       const statusEl = document.createElement('span');
       statusEl.id = 'connectivity-status';
-      statusEl.style.cssText = 'padding: 2px 8px; border-radius: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.3s;';
+      statusEl.style.cssText = 'transition: all 0.3s; cursor: default;';
       container.appendChild(statusEl);
 
       // Add Spinner CSS
@@ -325,18 +332,14 @@ async function uploadImage(base64Data, path) {
 
     const statusEl = document.getElementById('connectivity-status');
     if (navigator.onLine && syncFailureCount === 0) {
-      statusEl.textContent = 'Online';
-      statusEl.style.backgroundColor = 'rgba(40, 167, 69, 0.3)';
-      statusEl.style.color = '#fff';
+      statusEl.textContent = '🟢';
+      statusEl.title = 'Online & Synced';
     } else if (navigator.onLine && syncFailureCount > 0) {
-      statusEl.textContent = 'Sync Error';
-      statusEl.style.backgroundColor = 'rgba(220, 53, 69, 0.8)';
-      statusEl.style.color = '#fff';
-      statusEl.title = `Sync failed ${syncFailureCount} times. Check connection.`;
+      statusEl.textContent = '🔴';
+      statusEl.title = `Sync error (${syncFailureCount} failures)`;
     } else {
-      statusEl.textContent = 'Offline';
-      statusEl.style.backgroundColor = 'rgba(255, 193, 7, 0.5)';
-      statusEl.style.color = '#fff';
+      statusEl.textContent = '🔴';
+      statusEl.title = 'Offline';
     }
   }
 
@@ -346,22 +349,16 @@ async function uploadImage(base64Data, path) {
     const existingAuth = document.getElementById('auth-header-container');
     if (existingAuth) existingAuth.remove();
 
-    const authContainer = document.createElement('div');
+    const authContainer = document.createElement('div'); // Adjusted right position
     authContainer.id = 'auth-header-container';
-    authContainer.style.cssText = 'position: absolute; right: 150px; display: flex; align-items: center; gap: 10px; font-size: 0.6em;';
+    authContainer.style.cssText = 'position: absolute; right: 100px; display: flex; align-items: center; gap: 10px; font-size: 0.6em;';
 
     if (user) {
-      const name = user.displayName || 'User';
-      const initials = name.length > 1 ? (name[0] + name[name.length - 1]).toUpperCase() : name.toUpperCase();
-
       authContainer.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <span style="font-weight: bold; letter-spacing: 1px;">${initials}</span>
-          <button onclick="logout()" class="logout-icon-btn" data-tooltip="Logout">
-            ❌️
-          </button>
-        </div>
         <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
+        <button onclick="logout()" class="logout-icon-btn" data-tooltip="Logout">
+          ✕
+        </button>
       `;
       // Hide login overlay if it exists
       const overlay = document.getElementById('login-overlay');
