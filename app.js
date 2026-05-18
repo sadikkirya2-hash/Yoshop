@@ -1,10 +1,15 @@
-// Firebase configuration and initialization
+// Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, initializeFirestore } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAYvXfCDMzylmevTAoePLW84KhxLHAX9SA",
   authDomain: "yoshop-b502f.firebaseapp.com",
@@ -16,14 +21,14 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const firebaseApp = initializeApp(firebaseConfig);
-const analytics = getAnalytics(firebaseApp);
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
 // Initialize Firestore - use default database
 // Avoid specifying databaseId explicitly as it can cause compatibility issues
 let dbFirestore;
-try {
-  dbFirestore = getFirestore(firebaseApp);
+try { // Explicitly connect to the 'yoshop' database
+  dbFirestore = getFirestore(app, 'yoshop');
   console.log("Firestore initialized successfully");
 } catch (error) {
   console.warn("Firestore initialization warning (will retry on demand):", error.message);
@@ -32,8 +37,8 @@ try {
 
 console.log("Firebase initialized for project:", firebaseConfig.projectId);
 
-const storage = getStorage(firebaseApp);
-const auth = getAuth(firebaseApp);
+const storage = getStorage(app);
+const auth = getAuth(app);
 let currentUser = null;
 let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
 
@@ -147,6 +152,26 @@ async function uploadImage(base64Data, path) {
   let units = [];
 
   /**
+   * Robust wrapper for Firebase errors to provide better debugging info
+   */
+  function handleFirebaseError(error, context = "Firebase Operation") {
+    const errorCode = error.code || 'unknown';
+    const errorMessage = error.message || 'An unexpected error occurred';
+    
+    console.error(`[${context}] ❌ Error (${errorCode}):`, errorMessage);
+    
+    if (errorCode === 'permission-denied') {
+      console.warn(`[${context}] 🔐 Security Rules violation. Check if the user is authenticated and rules allow access to the path.`);
+    } else if (errorCode === 'not-found') {
+      console.warn(`[${context}] 🔍 The requested document or database instance was not found.`);
+    } else if (errorCode === 'unavailable') {
+      console.warn(`[${context}] 🔌 Service is currently unavailable. The app will continue in offline mode.`);
+    }
+    
+    return { code: errorCode, message: errorMessage };
+  }
+
+  /**
    * Debounced cloud sync - fires immediately but only syncs to cloud once per debounce period
    * This prevents excessive Firebase writes while ensuring rapid local updates
    */
@@ -214,8 +239,8 @@ async function uploadImage(base64Data, path) {
             }
             console.log('[SYNC] ✅ Cloud data synced successfully');
           } catch (firestoreError) {
-            console.warn("[SYNC] ⚠️ Firestore sync error (continuing in offline mode):", firestoreError.message);
             syncFailureCount++;
+            handleFirebaseError(firestoreError, "Firestore Sync");
           } finally {
             isDebouncing = false;
           }
@@ -3005,7 +3030,7 @@ async function uploadImage(base64Data, path) {
           }
         },
         (error) => {
-          console.warn("🟡 [SYNC] Real-time listener error:", error.message);
+          handleFirebaseError(error, "Real-Time Sync Listener");
           console.log('Falling back to local-only mode. You can still use the app offline.');
           isInitialLoadComplete = true; // Don't block local work if cloud fails
         }
@@ -3941,7 +3966,7 @@ async function uploadImage(base64Data, path) {
 Object.assign(window, {
   // Data and State (Required for inline HTML references)
   menu, activeOrders, transactions, settings, staff, dishCategories, customers, units, auth, currentUser,
-  db, CART_ID, analytics, firebaseApp,
+  db, CART_ID, analytics, app,
 
   // Functions
   toggleNav, showTab, renderMenu, addDish, generateRandomBarcode, editDish,
