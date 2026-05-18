@@ -38,6 +38,11 @@ let currentUser = null;
 let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
 
 let syncFailureCount = 0;
+let syncDebounceTimer = null;
+let isDebouncing = false;
+const SYNC_DEBOUNCE_DELAY = 300; // 300ms debounce for rapid changes
+let lastSyncTime = 0;
+const MIN_SYNC_INTERVAL = 500; // Minimum 500ms between syncs to respect Firebase limits
 
 // Helper function to upload images to Firebase Storage
 async function uploadImage(base64Data, path) {
@@ -141,9 +146,13 @@ async function uploadImage(base64Data, path) {
   let printerType = null; // 'USB' or 'BLUETOOTH'
   let units = [];
 
+  /**
+   * Debounced cloud sync - fires immediately but only syncs to cloud once per debounce period
+   * This prevents excessive Firebase writes while ensuring rapid local updates
+   */
   async function saveData(syncToCloud = true) {
     try {
-      // Save to local IndexedDB
+      // Save to local IndexedDB immediately (always, synchronous)
       await Promise.all([
         saveState('menu', menu || []),
         saveState('activeOrders', activeOrders || {}),
@@ -155,49 +164,69 @@ async function uploadImage(base64Data, path) {
         saveState('units', units || [])
       ]);
 
-      // Sync to Firebase Firestore if logged in and initial pull is finished
-      // This guard prevents local defaults from destroying your cloud data (like the logo)
-      if (currentUser && syncToCloud && isInitialLoadComplete && dbFirestore) {
-        try {
-          // Prepare data for Firestore. 
-          // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
-          const shopData = JSON.parse(JSON.stringify({
-            menu: menu || [],
-            activeOrders: activeOrders || {},
-            transactions: transactions || [],
-            settings: settings || defaultSettings,
-            staff: staff || [],
-            dishCategories: dishCategories || [],
-            customers: customers || [],
-            units: units || [],
-            lastUpdated: new Date().toISOString()
-          }));
-
-          // If we have many consecutive failures, stop trying until manual sync or reload
-          if (syncFailureCount > 5) {
-            console.warn("Sync suspended due to repeated failures. Check Firebase Console configuration.");
-            return;
+      // Debounce cloud sync to prevent excessive Firebase writes
+      if (syncToCloud && currentUser && isInitialLoadComplete && dbFirestore) {
+        // Clear existing debounce timer
+        if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+        
+        // Set new debounce timer for cloud sync
+        syncDebounceTimer = setTimeout(async () => {
+          syncDebounceTimer = null;
+          
+          // Check minimum interval to respect Firebase limits
+          const now = Date.now();
+          if (now - lastSyncTime < MIN_SYNC_INTERVAL) {
+            return; // Skip this sync, reschedule
           }
+          
+          try {
+            isDebouncing = true;
+            // Prepare data for Firestore
+            // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
+            const shopData = JSON.parse(JSON.stringify({
+              menu: menu || [],
+              activeOrders: activeOrders || {},
+              transactions: transactions || [],
+              settings: settings || defaultSettings,
+              staff: staff || [],
+              dishCategories: dishCategories || [],
+              customers: customers || [],
+              units: units || [],
+              lastUpdated: new Date().toISOString()
+            }));
 
-          await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData);
-          syncFailureCount = 0; // Reset on success
+            // If we have many consecutive failures, stop trying until manual sync or reload
+            if (syncFailureCount > 5) {
+              console.warn("Sync suspended due to repeated failures. Check Firebase Console configuration.");
+              isDebouncing = false;
+              return;
+            }
 
-          // Update Last Synced UI Tooltip
-          const syncBtn = document.getElementById('sync-now-btn');
-          if (syncBtn) {
-            syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+            // Perform actual cloud sync using merge to avoid overwriting other fields
+            await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData, { merge: true });
+            lastSyncTime = Date.now();
+            syncFailureCount = 0; // Reset on success
+
+            // Update Last Synced UI Tooltip
+            const syncBtn = document.getElementById('sync-now-btn');
+            if (syncBtn) {
+              syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+            }
+            console.log('[SYNC] ✅ Cloud data synced successfully');
+          } catch (firestoreError) {
+            console.warn("[SYNC] ⚠️ Firestore sync error (continuing in offline mode):", firestoreError.message);
+            syncFailureCount++;
+          } finally {
+            isDebouncing = false;
           }
-        } catch (firestoreError) {
-          console.warn("Firestore sync error (continuing in offline mode):", firestoreError.message);
-          syncFailureCount++;
-        }
+        }, SYNC_DEBOUNCE_DELAY);
       }
+      
       updateOnlineStatus();
     } catch (error) {
-      console.error("Sync failed:", error);
+      console.error("[SYNC] ❌ Local save failed:", error);
       syncFailureCount++;
       updateOnlineStatus();
-      // Silent failure for cloud sync to allow offline usage
     }
   }
 
@@ -2911,12 +2940,12 @@ async function uploadImage(base64Data, path) {
   let unsubscribeSync = null;
 
   /**
-   * Sets up a real-time listener for the user's data in Firestore.
-   * This allows changes from other devices/tabs to appear instantly.
+   * Sets up real-time listener for cross-device/cross-tab synchronization
+   * Updates all tabs/devices instantly when cloud data changes
    */
   function setupRealTimeSync(uid) {
     if (!dbFirestore) {
-      console.warn("Firestore not initialized, skipping real-time sync");
+      console.warn("🔴 Firestore not initialized, skipping real-time sync");
       isInitialLoadComplete = true; // Allow local-only operation
       return;
     }
@@ -2924,52 +2953,65 @@ async function uploadImage(base64Data, path) {
     if (unsubscribeSync) unsubscribeSync();
     
     try {
-      unsubscribeSync = onSnapshot(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"), (docSnap) => {
-        if (docSnap.exists()) {
-          // Only update if changes come from the cloud (server)
-          // This prevents the UI from resetting while the user is actively making changes locally
-          if (!docSnap.metadata.hasPendingWrites) {
+      console.log('🟢 [SYNC] Setting up real-time listener for cross-device sync...');
+      
+      unsubscribeSync = onSnapshot(
+        doc(dbFirestore, "users", uid, "data", "SHOP_DATA"),
+        { includeMetadataChanges: true },
+        (docSnap) => {
+          if (docSnap.exists()) {
             const cloudData = docSnap.data();
-            console.log("Real-time data update received from cloud.");
             
-            // Update global state
-            menu = cloudData.menu || menu;
-            activeOrders = cloudData.activeOrders || activeOrders;
-            transactions = cloudData.transactions || transactions;
-            settings = cloudData.settings || settings;
-            staff = cloudData.staff || staff;
-            dishCategories = cloudData.dishCategories || dishCategories;
-            customers = cloudData.customers || customers;
-            units = cloudData.units || units;
+            // Only update if changes come from the cloud (server)
+            // hasPendingWrites = true means this is our local change being reflected
+            // hasPendingWrites = false means this is an update from another device
+            if (!docSnap.metadata.hasPendingWrites) {
+              console.log('🔄 [SYNC] ✅ Real-time update from cloud (from another device/tab)');
+              
+              // Update global state with cloud data
+              menu = cloudData.menu || menu;
+              activeOrders = cloudData.activeOrders || activeOrders;
+              transactions = cloudData.transactions || transactions;
+              settings = cloudData.settings || settings;
+              staff = cloudData.staff || staff;
+              dishCategories = cloudData.dishCategories || dishCategories;
+              customers = cloudData.customers || customers;
+              units = cloudData.units || units;
 
-            // Mark initial load as complete - now it's safe for saveData to push to cloud
-            isInitialLoadComplete = true;
+              // Mark initial load as complete
+              isInitialLoadComplete = true;
 
-            // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
-            saveData(false); 
+              // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
+              saveData(false); 
 
-            // Refresh the current UI view
-            refreshCurrentView();
-            updateDashboard();
-            applyTheme(); // Ensure theme is updated
+              // Refresh the current UI view immediately
+              refreshCurrentView();
+              updateDashboard();
+              applyTheme();
 
-            // Visual feedback on the sync button
-            const statusEl = document.getElementById('connectivity-status');
-            if (statusEl && statusEl.classList) {
-              statusEl.classList.add('sync-pulse');
-              setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+              // Visual feedback on the sync button
+              const statusEl = document.getElementById('connectivity-status');
+              if (statusEl && statusEl.classList) {
+                statusEl.classList.add('sync-pulse');
+                setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+              }
+            } else {
+              console.log('📤 [SYNC] Local changes acknowledged by cloud');
             }
+          } else {
+            // Document doesn't exist on cloud yet
+            console.log('📝 [SYNC] No cloud data found, user can create new data');
+            isInitialLoadComplete = true;
           }
-        } else {
-          // If the document doesn't exist, we mark as complete so the user can create it
-          isInitialLoadComplete = true;
+        },
+        (error) => {
+          console.warn("🟡 [SYNC] Real-time listener error:", error.message);
+          console.log('Falling back to local-only mode. You can still use the app offline.');
+          isInitialLoadComplete = true; // Don't block local work if cloud fails
         }
-      }, (error) => {
-        console.warn("Real-time sync listener error (continuing in offline mode):", error.message);
-        isInitialLoadComplete = true; // Don't block local work if cloud fails
-      });
+      );
     } catch (error) {
-      console.warn("Error setting up real-time sync (continuing in offline mode):", error.message);
+      console.warn("🟡 [SYNC] Error setting up real-time sync:", error.message);
       isInitialLoadComplete = true; // Allow offline operation
     }
   }
@@ -3093,13 +3135,41 @@ async function uploadImage(base64Data, path) {
       setupSettingsAccordion();
       updatePrinterStatus(false);
 
-      // High-Frequency Sync Heartbeat
-      // Periodically pushes local data to the cloud to ensure all devices are perfectly aligned.
-      setInterval(() => {
-        if (currentUser && navigator.onLine) {
+      // Instant Sync on Visibility Change
+      // Save immediately when app goes to background
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          console.log('[SYNC] 📵 App backgrounding - forcing immediate sync');
+          // Force immediate sync by clearing debounce
+          if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+          syncDebounceTimer = null;
+          lastSyncTime = 0; // Reset to allow immediate sync
           saveData();
         }
-      }, 3000); // 3-second interval provides near-instant sync while respecting Firebase limits
+      });
+      
+      // Sync on online status change
+      window.addEventListener('online', () => {
+        console.log('[SYNC] 🌐 Back online - syncing all data');
+        if (currentUser) {
+          if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+          syncDebounceTimer = null;
+          lastSyncTime = 0; // Reset to allow immediate sync
+          saveData();
+        }
+      });
+      
+      // Listen for updates from other tabs/windows using storage events
+      window.addEventListener('storage', (event) => {
+        if (event.key && event.key.startsWith('posDB')) {
+          console.log('[SYNC] 📱 Data changed in another tab - refreshing');
+          // Data was changed in another tab, refresh current view
+          setTimeout(() => {
+            refreshCurrentView();
+            updateDashboard();
+          }, 100);
+        }
+      });
 
       // Save on visibility change (mobile app backgrounding/closing)
       document.addEventListener('visibilitychange', () => {
