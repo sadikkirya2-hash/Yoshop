@@ -440,11 +440,19 @@ async function uploadImage(base64Data, path) {
       case 'addDishTab':
         renderDishesTable();
         break;
-      case 'settingsTab':
+      case 'categoryTab':
         renderCategoryList();
+        break;
+      case 'unitTab':
         renderUnitList();
+        break;
+      case 'staffTab':
         renderStaffList();
+        break;
+      case 'customerTab':
         renderCustomerList();
+        break;
+      case 'settingsTab':
         loadSettings();
         break;
       case 'stockTab':
@@ -2737,15 +2745,8 @@ async function uploadImage(base64Data, path) {
           
           // Calculate available height for scrolling
           // Special handling for management sections to take up full height
-          const headerText = header.textContent;
-          if (headerText === "Category" || headerText === "Staff" || headerText === "Customer") {
-            const availableHeight = window.innerHeight - settingsTab.getBoundingClientRect().top - header.offsetHeight - 150; // 150px for bottom padding/offset
-            content.style.maxHeight = availableHeight > 200 ? `${availableHeight}px` : '200px'; // Set a minimum max-height
-            content.style.padding = "20px";
-          } else {
-            content.style.maxHeight = content.scrollHeight + "px";
-            content.style.padding = "20px";
-          }
+          content.style.maxHeight = content.scrollHeight + "px";
+          content.style.padding = "20px";
         }
       });
     });
@@ -3059,7 +3060,11 @@ async function uploadImage(base64Data, path) {
       'transactionsTab': renderTransactions,
       'menuTab': renderMenu,
       'addDishTab': renderDishesTable,
-      'settingsTab': () => { renderCategoryList(); renderUnitList(); renderStaffList(); renderCustomerList(); loadSettings(); },
+      'categoryTab': renderCategoryList,
+      'unitTab': renderUnitList,
+      'staffTab': renderStaffList,
+      'customerTab': renderCustomerList,
+      'settingsTab': () => { loadSettings(); },
       'stockTab': () => { renderInventoryReport(); renderStockListTable(); renderUnitList(); },
       'reportsTab': () => { populateReportFilters(); renderReport(); }
     };
@@ -3156,6 +3161,7 @@ async function uploadImage(base64Data, path) {
       renderCategoryList();
       renderInventoryReport();
       renderCustomerList();
+      renderStaffList();
       toggleAddCustomerForm(false);
       renderUnitList();
       populateReportFilters();

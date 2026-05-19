@@ -188,6 +188,10 @@
       <button class="active" onclick="showTab('dashboardTab', this)"><span>📊</span><span>Dashboard</span></button>
       <button onclick="showTab('menuTab', this)"><span>🛒</span><span>Shop</span></button>
       <button onclick="showTab('addDishTab', this)"><span>🛍️</span><span>Products</span></button>
+      <button onclick="showTab('categoryTab', this)"><span>🏷️</span><span>Categories</span></button>
+      <button onclick="showTab('unitTab', this)"><span>📏</span><span>Units</span></button>
+      <button onclick="showTab('staffTab', this)"><span>👥</span><span>Staff</span></button>
+      <button onclick="showTab('customerTab', this)"><span>👤</span><span>Customers</span></button>
       <button onclick="showTab('stockTab', this)"><span>📦</span><span>Stock</span></button>
       <button onclick="showTab('transactionsTab', this)"><span>🧾</span><span>Sales</span></button>
       <button onclick="showTab('reportsTab', this)"><span>📈</span><span>Reports</span></button>
@@ -299,6 +303,82 @@
                     <tr><th>Image</th><th>Product</th><th style="text-align: right;">Cost</th><th style="text-align: right;">Price</th><th style="text-align: right;">Profit</th><th style="text-align: right;">Action</th></tr>
                 </thead>
                 <tbody id="dishesTableBody"></tbody>
+            </table>
+        </div>
+      </section>
+
+      <!-- Categories -->
+      <section id="categoryTab">
+        <h3>🏷️ Categories</h3>
+        <div class="form-panel">
+          <div class="input-row">
+            <input type="text" id="categoryNameInput" placeholder="New Category Name">
+            <button class="btn" onclick="addCategory()">Add Category</button>
+          </div>
+          <table class="u-mt-15">
+            <thead><tr><th>Category Name</th><th style="text-align: right;">Action</th></tr></thead>
+            <tbody id="categoryListBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Units -->
+      <section id="unitTab">
+        <h3>📏 Units</h3>
+        <div class="form-panel">
+          <p>Manage the units of measurement for your inventory items.</p>
+          <div class="input-row">
+            <input type="text" id="unitFullNameInput" placeholder="Full Name (e.g., Kilogram)">
+            <input type="text" id="unitNameInput" placeholder="Short Name (e.g., kg)">
+            <button class="btn" onclick="addUnit()">Add Unit</button>
+          </div>
+          <table class="u-mt-15">
+            <thead><tr><th>Full Name</th><th>Short Name</th><th style="text-align: right;">Action</th></tr></thead>
+            <tbody id="unitListBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Staff Management -->
+      <section id="staffTab">
+        <h3>👥 Staff Management</h3>
+        <div class="form-panel">
+          <div class="input-row">
+            <input type="text" id="staffNameInput" placeholder="Staff Name">
+            <input type="text" id="staffRoleInput" placeholder="Staff Role (e.g., Server, Manager)">
+            <button class="btn" onclick="addStaff()">Add Staff</button>
+          </div>
+          <table class="u-mt-15">
+            <thead><tr><th>Name</th><th>Role</th><th style="text-align: right;">Action</th></tr></thead>
+            <tbody id="staffListBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Customer Management -->
+      <section id="customerTab">
+        <h3>👤 Customer Management</h3>
+        <div class="form-panel">
+            <div id="addCustomerFormContainer">
+              <h5 style="margin-top: 0;">Add/Edit Customer</h5>
+              <input type="hidden" id="customerIndex">
+              <div class="input-row">
+                  <input type="text" id="customerNameInput" placeholder="Customer Name">
+                  <input type="text" id="customerContactInput" placeholder="Contact (Phone/Email)">
+              </div>
+              <div class="input-row"><input type="text" id="customerAddressInput" placeholder="Address"></div>
+              <div class="input-row" style="justify-content: flex-end;">
+                  <button class="btn" id="saveCustomerBtn" onclick="addCustomer()">Save Customer</button>
+                  <button class="btn btn-secondary" onclick="toggleAddCustomerForm(false)">Cancel</button>
+              </div>
+            </div>
+            <div id="customerListHeader" style="display: flex; justify-content: space-between; align-items: center;">
+              <h5 style="margin: 0;">All Customers</h5>
+              <button class="btn" id="addCustomerBtn" onclick="toggleAddCustomerForm(true)">➕ Add New Customer</button>
+            </div>
+            <table class="u-mt-15">
+              <thead><tr><th>Name</th><th>Contact</th><th>Address</th><th style="text-align: right; white-space: nowrap;">Action</th></tr></thead>
+              <tbody id="customerListBody"></tbody>
             </table>
         </div>
       </section>
@@ -470,73 +550,6 @@
             </div>
             <button class="btn" onclick="saveSettings()">Save Settings</button>
           </div>
-        </div>
-        <div class="settings-group">
-          <h4 class="settings-header">Unit</h4>
-          <div class="settings-content">
-            <p>Manage the units of measurement for your inventory items.</p>
-            <div class="input-row">
-              <input type="text" id="unitFullNameInput" placeholder="Full Name (e.g., Kilogram)">
-              <input type="text" id="unitNameInput" placeholder="Short Name (e.g., kg)">
-              <button class="btn" onclick="addUnit()">Add Unit</button>
-            </div>
-            <table class="u-mt-15">
-              <thead><tr><th>Full Name</th><th>Short Name</th><th style="text-align: right;">Action</th></tr></thead>
-              <tbody id="unitListBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="settings-group">
-          <h4 class="settings-header">Category</h4>
-          <div class="settings-content">
-            <div class="input-row">
-              <input type="text" id="categoryNameInput" placeholder="New Category Name">
-              <button class="btn" onclick="addCategory()">Add Category</button>
-            </div>
-            <table class="u-mt-15">
-              <thead><tr><th>Category Name</th><th style="text-align: right;">Action</th></tr></thead>
-              <tbody id="categoryListBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="settings-group">
-          <h4 class="settings-header">Staff</h4>
-          <div class="settings-content">
-            <div class="input-row">
-              <input type="text" id="staffNameInput" placeholder="Staff Name">
-              <input type="text" id="staffRoleInput" placeholder="Staff Role (e.g., Server, Manager)">
-              <button class="btn" onclick="addStaff()">Add Staff</button>
-            </div>
-            <table class="u-mt-15">
-              <thead><tr><th>Name</th><th>Role</th><th style="text-align: right;">Action</th></tr></thead>
-              <tbody id="staffListBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="settings-group">
-          <h4 class="settings-header">Customer</h4>
-          <div class="settings-content">
-            <div id="addCustomerFormContainer">
-              <h5 style="margin-top: 0;">Add/Edit Customer</h5>
-              <input type="hidden" id="customerIndex">
-              <div class="input-row">
-                  <input type="text" id="customerNameInput" placeholder="Customer Name">
-                  <input type="text" id="customerContactInput" placeholder="Contact (Phone/Email)">
-              </div>
-              <div class="input-row"><input type="text" id="customerAddressInput" placeholder="Address"></div>
-              <div class="input-row" style="justify-content: flex-end;">
-                  <button class="btn" id="saveCustomerBtn" onclick="addCustomer()">Save Customer</button>
-                  <button class="btn" onclick="toggleAddCustomerForm(false)" style="background-color: #6c757d;">Cancel</button>
-              </div>
-            </div>
-            <div id="customerListHeader">
-              <h5 style="margin: 0;">All Customers</h5>
-              <button class="btn" id="addCustomerBtn" onclick="toggleAddCustomerForm(true)">➕ Add New Customer</button>
-            </div>
-            <table class="u-mt-15">
-              <thead><tr><th>Name</th><th>Contact</th><th>Address</th><th style="text-align: right; white-space: nowrap;">Action</th></tr></thead>
-              <tbody id="customerListBody"></tbody>
-            </table>
         </div>
         <div class="settings-group">
           <h4 class="settings-header">Barcode Scanner</h4>
