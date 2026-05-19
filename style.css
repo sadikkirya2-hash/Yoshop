@@ -20,6 +20,7 @@
     --card: #fff;
     --text: #333;
     --border-color: #eee;
+    --progress-fill: #ffffff;
   }
   /* Hide scrollbar for Chrome, Safari and Opera */
   ::-webkit-scrollbar {
@@ -48,6 +49,7 @@
     --card: var(--card-dark);
     --text: var(--text-dark);
     --border-color: var(--border-dark);
+    --progress-fill: #ffffff; /* You can change this to var(--primary) if preferred */
   }
   body.dark-mode .dashboard-card {
     background: linear-gradient(145deg, #2c2c2c, #222);
@@ -1275,7 +1277,7 @@
 #update-progress-bar {
   width: 0%;
   height: 100%;
-  background: white;
+  background: var(--progress-fill);
   transition: width 0.8s ease-in-out;
 }
 

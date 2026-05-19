@@ -3071,6 +3071,22 @@ async function uploadImage(base64Data, path) {
     if (renderMap[activeTab.id]) renderMap[activeTab.id]();
   }
 
+  /**
+   * Fetches the current version string from sw.js and updates the UI
+   */
+  async function updateVersionDisplay() {
+    const displayEl = document.getElementById('app-version-display');
+    if (!displayEl) return;
+    try {
+      const response = await fetch('./sw.js');
+      const text = await response.text();
+      const match = text.match(/CACHE_NAME\s*=\s*['"]yobill-(v\d+)['"]/);
+      if (match) displayEl.textContent = match[1].toUpperCase();
+    } catch (e) {
+      displayEl.textContent = '1.5.0'; // Fallback
+    }
+  }
+
   // ===== Main App Initialization =====
   async function mainInit() {
     try {
@@ -3145,6 +3161,7 @@ async function uploadImage(base64Data, path) {
       renderDishesTable();
       renderMenu();
       loadSettings();
+      updateVersionDisplay();
 
       // Background Cloud Sync
       onAuthStateChanged(auth, async (user) => {
@@ -3388,6 +3405,7 @@ async function uploadImage(base64Data, path) {
         // Send message to SW to skip waiting and activate
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
       } else {
+        if (isManual) alert("Checking for updates... If a new version is found, the app will update automatically.");
         if (reg) reg.update();
       }
     });
