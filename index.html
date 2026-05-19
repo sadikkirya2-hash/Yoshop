@@ -165,10 +165,20 @@
   <!-- This div is for printing only -->
   <div id="printArea" class="receipt-print-area"></div>
 
+  <!-- Update Overlay (Hidden by default) -->
+  <div id="update-overlay">
+    <div class="spinner" style="width: 50px; height: 50px; border-width: 5px;"></div>
+    <h2 style="margin-top: 20px;">Updating Yobill...</h2>
+    <p>We're installing the latest version for you.</p>
+    <div class="progress-container">
+      <div id="update-progress-bar"></div>
+    </div>
+  </div>
+
   <!-- Update Toast Notification -->
   <div id="updateToast">
     <span class="update-toast-content">🚀 New update available!</span>
-    <button onclick="triggerAppUpdate()" class="update-now-btn">Update Now</button>
+    <button onclick="triggerAppUpdate(true)" class="update-now-btn">Update Now</button>
     <button onclick="document.getElementById('updateToast').style.display='none'" class="update-close-btn">&times;</button>
   </div>
 
@@ -600,7 +610,7 @@
           <div class="settings-content">
             <p>Warning: This will permanently delete all menu items and order history.</p>
             <div class="input-row" style="justify-content: center; align-items: center;">
-              <button class="btn" id="settingsUpdateBtn" onclick="triggerAppUpdate()" style="background: #ffc107; display: none; color: #000;">✨ Update App</button>
+              <button class="btn" id="settingsUpdateBtn" onclick="triggerAppUpdate(true)" style="background: #ffc107; display: none; color: #000;">✨ Update App</button>
               <button class="btn" id="installAppBtn" style="background: #007bff;">Install App</button>
               <button class="btn" onclick="exportTransactionsToCSV()" style="background: #007bff;">Export CSV</button>
               <button class="btn" onclick="backupAllData()" style="background: #17a2b8;">Backup JSON</button>

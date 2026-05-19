@@ -3258,7 +3258,7 @@ async function uploadImage(base64Data, path) {
         
         // Check if there's already a waiting worker (update ready but not activated)
         if (registration.waiting) {
-          showUpdateNotification();
+          triggerAppUpdate(false);
         }
 
         // Listen for new updates
@@ -3266,7 +3266,7 @@ async function uploadImage(base64Data, path) {
           const newWorker = registration.installing;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              showUpdateNotification();
+              triggerAppUpdate(false);
             }
           });
         });
@@ -3284,15 +3284,38 @@ async function uploadImage(base64Data, path) {
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {
-        window.location.reload();
+        const overlay = document.getElementById('update-overlay');
+        const progressBar = document.getElementById('update-progress-bar');
+        if (overlay) overlay.style.display = 'flex';
+        
+        if (progressBar) {
+          // Trigger the white bar to slide across
+          setTimeout(() => { progressBar.style.width = '100%'; }, 50);
+        }
+        
+        // Small delay to ensure user sees the "Updating" message
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
         refreshing = true;
       }
     });
   }
 
+  function isCheckoutActive() {
+    const paymentModal = document.getElementById('paymentModal');
+    const splitModal = document.getElementById('billSplitModal');
+    const isPaymentOpen = paymentModal && paymentModal.style.display === 'flex';
+    const isSplitOpen = splitModal && splitModal.style.display === 'flex';
+    return isPaymentOpen || isSplitOpen;
+  }
+
   function showUpdateNotification() {
+    // Prevent duplicate notifications in the center
+    if (appNotifications.some(n => n.message.includes('new version of Yobill'))) return;
+
     // Add to notification center
-    addNotification('A new version of Yobill is available.', 'info', 'triggerAppUpdate()');
+    addNotification('A new version of Yobill is available.', 'info', 'triggerAppUpdate(true)');
     
     playNotificationSound();
 
@@ -3302,7 +3325,17 @@ async function uploadImage(base64Data, path) {
 
     // Show toast
     const toast = document.getElementById('updateToast');
-    if (toast) toast.style.display = 'block';
+    if (toast) {
+      toast.style.display = 'block';
+      
+      // Auto-hide toast after 10 seconds
+      setTimeout(() => {
+        if (toast.style.display === 'block') {
+          toast.style.animation = 'slideOut 0.3s ease-in forwards';
+          setTimeout(() => { toast.style.display = 'none'; }, 300);
+        }
+      }, 10000);
+    }
 
     // Show system notification if enabled
     if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
@@ -3342,13 +3375,19 @@ async function uploadImage(base64Data, path) {
     }
   }
 
-  function triggerAppUpdate() {
+  function triggerAppUpdate(isManual = false) {
+    // If an automatic update is found during checkout, show notification but postpone reload
+    if (!isManual && isCheckoutActive()) {
+      showUpdateNotification();
+      console.log('[UPDATE] Checkout active, postponing automatic reload.');
+      return;
+    }
+
     navigator.serviceWorker.getRegistration().then(reg => {
       if (reg && reg.waiting) {
         // Send message to SW to skip waiting and activate
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
       } else {
-        alert("Checking for updates...");
         if (reg) reg.update();
       }
     });

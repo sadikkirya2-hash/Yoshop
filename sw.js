@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yobill-v14';
+const CACHE_NAME = 'yobill-v15';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -20,7 +20,7 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
-  
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
