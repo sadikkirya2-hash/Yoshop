@@ -160,6 +160,15 @@ async function uploadImage(base64Data, path) {
   let printerType = null; // 'USB' or 'BLUETOOTH'
   let units = [];
 
+  // Helper to get logged in user's first name
+  function getCurrentServerName() {
+    if (currentUser) {
+      if (currentUser.displayName) return currentUser.displayName.trim().split(/\s+/)[0];
+      if (currentUser.email) return currentUser.email.split('@')[0];
+    }
+    return 'N/A';
+  }
+
   /**
    * Robust wrapper for Firebase errors to provide better debugging info
    */
@@ -969,7 +978,7 @@ async function uploadImage(base64Data, path) {
       return alert("Please assign all items before processing payments.");
     }
 
-    const serverName = activeOrders[CART_ID].server || 'N/A';
+    const serverName = getCurrentServerName();
     closeSplitBillModal();
 
     for (let i = 0; i < splitState.bills.length; i++) {
@@ -1006,7 +1015,6 @@ async function uploadImage(base64Data, path) {
     saveData();
     renderMenu();
     updateDashboard();
-    document.getElementById('servedBy').value = '';
     alert(`All split payments processed successfully!`);
   }
 
@@ -1167,7 +1175,7 @@ async function uploadImage(base64Data, path) {
 
     const transaction = {
       date: new Date().toISOString(),
-      customerName: document.getElementById('servedBy').value || 'N/A',
+      customerName: getCurrentServerName(),
       tableNo: 'Shop',
       items: [...currentOrder.items],
       total: finalTotal,
@@ -1188,7 +1196,6 @@ async function uploadImage(base64Data, path) {
     renderMenu();
     updateDashboard();
     document.getElementById('paymentModal').style.display = 'none';
-    document.getElementById('servedBy').value = '';
     alert(`Sale processed successfully!`);
   }
 
@@ -1325,7 +1332,7 @@ async function uploadImage(base64Data, path) {
         const totals = calculateTransactionTotals(currentOrder.items);
         currentTransaction = {
           date: new Date().toLocaleString(),
-          customerName: document.getElementById('servedBy').value || 'N/A',
+          customerName: getCurrentServerName(),
           tableNo: 'Shop',
           items: [...currentOrder.items],
           total: totals.total,
@@ -1435,7 +1442,7 @@ async function uploadImage(base64Data, path) {
       const totals = calculateTransactionTotals(currentOrder.items);
       printTransaction = {
         date: new Date().toLocaleString(),
-        customerName: document.getElementById('servedBy').value || 'N/A',
+        customerName: getCurrentServerName(),
         tableNo: 'Shop',
         items: [...currentOrder.items],
         total: totals.total,
@@ -2290,6 +2297,7 @@ async function uploadImage(base64Data, path) {
 
   function populateServedByDropdown() {
     const select = document.getElementById('servedBy');
+    if (!select) return;
     select.innerHTML = '<option value="">Sold By...</option>'; // Reset and add default
     staff.forEach(member => {
       const option = document.createElement('option');
@@ -3256,7 +3264,7 @@ async function uploadImage(base64Data, path) {
     }
     overlay.innerHTML = `
       ${logoHtml}
-      <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'Yobill'}</h1>
+      <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
       <p style="font-size: 1.2em; margin-bottom: 30px;">Please login to access your POS</p>
       <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 15px 40px; font-size: 1.2em; font-weight: bold;">Sign In with Google</button>
     `;
@@ -3329,10 +3337,10 @@ async function uploadImage(base64Data, path) {
 
   function showUpdateNotification() {
     // Prevent duplicate notifications in the center
-    if (appNotifications.some(n => n.message.includes('new version of Yobill'))) return;
+    if (appNotifications.some(n => n.message.includes('new version of YoShop'))) return;
 
     // Add to notification center
-    addNotification('A new version of Yobill is available.', 'info', 'triggerAppUpdate(true)');
+    addNotification('A new version of YoShop is available.', 'info', 'triggerAppUpdate(true)');
     
     playNotificationSound();
 
@@ -3919,14 +3927,14 @@ async function uploadImage(base64Data, path) {
     if (Notification.permission === 'granted') {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then(reg => {
-          reg.showNotification('Yobill Notification', {
+          reg.showNotification('YoShop Notification', {
             body: 'Notifications are working correctly!',
             icon: 'assets/icons/icon-192x192.png',
             vibrate: [100, 50, 100]
           });
         });
       } else {
-        new Notification('Yobill Notification', {
+        new Notification('YoShop Notification', {
           body: 'Notifications are working correctly!',
           icon: 'assets/icons/icon-192x192.png'
         });

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Yobill</title>
+<title>YoShop</title>
 <link rel="icon" type="image/png" href="assets/icons/icon-192x192.png">
 <link rel="canonical" href="https://yobill.netlify.app/">
 <link rel="manifest" href="manifest.json">
@@ -30,7 +30,7 @@
     <div class="splash-content">
       <img src="assets/icons/icon-192x192.png" alt="Yobill Logo" class="splash-logo-img">
       <p>Welcome to</p>
-      <h1>Yobill</h1>
+      <h1>YoShop</h1>
     </div>
   </div>
 
@@ -38,7 +38,7 @@
     <button id="menu-toggle" class="icon-btn" onclick="toggleNav()">&#9776;</button>
     <!-- Mini Thermal Printer Emoji -->
     <span class="header-logo">🖨️</span>
-    Yobill
+    YoShop
     <button id="header-printer-status" class="icon-btn" title="Printer Connected">
       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>
     </button>
@@ -168,7 +168,7 @@
   <!-- Update Overlay (Hidden by default) -->
   <div id="update-overlay">
     <div class="spinner" style="width: 50px; height: 50px; border-width: 5px;"></div>
-    <h2 style="margin-top: 20px;">Updating Yobill...</h2>
+    <h2 style="margin-top: 20px;">Updating YoShop...</h2>
     <p>We're installing the latest version for you.</p>
     <div class="progress-container">
       <div id="update-progress-bar"></div>
@@ -213,9 +213,6 @@
       <!-- Menu -->
       <section id="menuTab" data-table-id="">
         <div id="menuHeaderContainer">
-          <div class="menu-header-row">
-            <h3 id="menuTabTitle">Shop</h3>
-          </div>
           <div id="menuOrderSummary" class="menu-summary">
               <div class="total">Total: <span class="currency-symbol">$</span> <span id="menuTotal">0.00</span></div>
               <div>
@@ -230,9 +227,6 @@
             <input type="text" id="menuSearch" placeholder="Search for a product..." onkeyup="renderMenu()">
             <button class="btn camera-scan-btn" onclick="startCameraScan()" title="Scan with Camera">📷</button>
             <button class="btn manual-barcode-btn" onclick="manualBarcodeInput()" title="Enter Barcode Manually">⌨️</button>
-            <select id="servedBy" onchange="handleServerChange()" title="Sold By">
-              <option value="">Sold By...</option>
-            </select>
           </div>
         </div>
         <div id="menuCategories"></div>
@@ -304,8 +298,8 @@
         </div>
 
         <h3>📋 Products List 
-          <button class="btn add-product-header" onclick="toggleAddDishForm(true)">➕ Add New Product</button>
-          <button class="btn print-barcodes-btn" onclick="generateAndPrintBarcodes()">🖨️ Print Barcodes</button>
+          <button class="btn add-product-header" onclick="toggleAddDishForm(true)">➕ Add New</button>
+          <button class="btn print-barcodes-btn" onclick="generateAndPrintBarcodes()">🖨️ Print</button>
         </h3>
         <div>
           <table>
@@ -535,7 +529,7 @@
       <section id="settingsTab">
         <h3>⚙️ Settings</h3>
         <div class="settings-group" id="restaurantDetailsSettings">
-          <h4 class="settings-header" data-content-class="center-content">Restaurant Details</h4>
+          <h4 class="settings-header" data-content-class="center-content">Business Details</h4>
           <div class="settings-content">
             <div class="input-row"><input type="text" id="companyName" placeholder="Company Name"></div>
             <div class="input-row"><input type="text" id="companyAddress" placeholder="Address"></div>
@@ -621,7 +615,7 @@
           </div>
         </div>
         <div class="u-text-center u-mt-20 u-fs-08" style="padding-bottom: 20px; color: #888; opacity: 0.8; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <span>Yobill Version <span id="app-version-display">...</span></span>
+          <span>YoShop Version <span id="app-version-display">...</span></span>
           <button class="btn btn-secondary" onclick="triggerAppUpdate(true)" style="font-size: 0.8em; padding: 2px 8px; margin: 0; background: #6c757d;">Check for Updates</button>
         </div>
       </section>
