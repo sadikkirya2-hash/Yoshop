@@ -374,7 +374,10 @@ async function uploadImage(base64Data, path) {
       if (overlay) overlay.style.display = 'none';
     } else {
       authContainer.innerHTML = `
-        <button onclick="login()" class="btn" style="margin: 0; background: white; color: var(--primary); font-size: 0.9em; padding: 5px 15px;">Login with Google</button>
+        <button onclick="login()" class="btn" style="margin: 0; background: white; color: var(--primary); font-size: 0.8em; padding: 5px 12px; display: flex; align-items: center; gap: 8px; border-radius: 4px; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 16px; height: 16px;">
+          Login with Google
+        </button>
       `;
       // Ensure login overlay is visible
       showLoginOverlay();
@@ -3249,7 +3252,10 @@ async function uploadImage(base64Data, path) {
   function showLoginOverlay() {
     let overlay = document.getElementById('login-overlay');
     const logoUrl = sanitizeLogoUrl(settings?.logo);
-    const logoHtml = logoUrl ? `<img src="${logoUrl}" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px; filter: brightness(0) invert(1);">` : '<div style="font-size: 80px; margin-bottom: 20px;">🧾</div>';
+    // Use the app logo as a fallback if no company logo is found
+    const displayLogo = logoUrl || 'assets/icons/icon-192x192.png';
+    // Display the logo image with an onerror fallback to ensure the app logo shows if the company URL is broken
+    const logoHtml = `<img src="${displayLogo}" onerror="this.src='assets/icons/icon-192x192.png';" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px;">`;
 
     if (!overlay) {
       overlay = document.createElement('div');
@@ -3266,7 +3272,10 @@ async function uploadImage(base64Data, path) {
       ${logoHtml}
       <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
       <p style="font-size: 1.2em; margin-bottom: 30px;">Please login to access your POS</p>
-      <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 15px 40px; font-size: 1.2em; font-weight: bold;">Sign In with Google</button>
+      <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.2em; font-weight: bold; display: flex; align-items: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
+        Sign In with Google
+      </button>
     `;
     overlay.style.display = 'flex';
   }
