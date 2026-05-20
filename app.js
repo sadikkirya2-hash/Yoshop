@@ -40,6 +40,9 @@ console.log("Firebase initialized for project:", firebaseConfig.projectId);
 const storage = getStorage(app);
 const auth = getAuth(app);
 let currentUser = null;
+let currentUserRole = sessionStorage.getItem('currentUserRole');
+let currentUserPermissions = JSON.parse(sessionStorage.getItem('currentUserPermissions') || '[]');
+let isPinVerified = sessionStorage.getItem('isPinVerified') === 'true' && !!currentUserRole;
 let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
 
 let syncFailureCount = 0;
@@ -55,12 +58,7 @@ async function uploadImage(base64Data, path) {
     if (!base64Data || !base64Data.startsWith('data:image')) return base64Data;
     let userIdentifier = 'anonymous'; // Default for public uploads
     if (currentUser) {
-      if (currentUser.email) {
-        userIdentifier = currentUser.email;
-      } else {
-        console.warn("currentUser.email is missing, falling back to currentUser.uid for storage path.");
-        userIdentifier = currentUser.uid; // Fallback to UID if email is missing
-      }
+      userIdentifier = currentUser.email || currentUser.uid; // Use email as primary identifier as requested
     }
     const userPath = `users/${userIdentifier}/${path}`;
     const storageRef = ref(storage, userPath);
@@ -141,6 +139,7 @@ async function uploadImage(base64Data, path) {
   let staff = [];
   let dishCategories = [];
   let customers = [];
+  let restockHistory = [];
 
   const defaultDishCategories = [];
   const defaultSettings = { 
@@ -151,7 +150,8 @@ async function uploadImage(base64Data, path) {
     theme: "light",
     defaultMarkup: 200, // Default 200% markup
     lowStockThreshold: 10,
-    taxRate: 0
+    taxRate: 0,
+    managerPIN: "1234" // Default Manager PIN
   };
   let settings = { ...defaultSettings };
   const defaultStaff = [];
@@ -204,7 +204,8 @@ async function uploadImage(base64Data, path) {
         saveState('staff', staff || []),
         saveState('dishCategories', dishCategories || []),
         saveState('customers', customers || []),
-        saveState('units', units || [])
+        saveState('units', units || []),
+        saveState('restockHistory', restockHistory || [])
       ]);
 
       // Debounce cloud sync to prevent excessive Firebase writes
@@ -235,6 +236,7 @@ async function uploadImage(base64Data, path) {
               dishCategories: dishCategories || [],
               customers: customers || [],
               units: units || [],
+              restockHistory: restockHistory || [],
               lastUpdated: new Date().toISOString()
             }));
 
@@ -301,6 +303,7 @@ async function uploadImage(base64Data, path) {
     let container = document.getElementById('connectivity-container');
     if (!container) {
       const header = document.querySelector('header');
+      if (!header) return; // Safety check: if header isn't rendered yet, skip
       container = document.createElement('div');
       container.id = 'connectivity-container'; // Adjusted right position
       container.style.cssText = 'position: absolute; right: 175px; display: flex; align-items: center; gap: 8px; font-size: 0.6em;';
@@ -360,7 +363,7 @@ async function uploadImage(base64Data, path) {
 
     const authContainer = document.createElement('div'); // Adjusted right position
     authContainer.id = 'auth-header-container';
-    authContainer.style.cssText = 'position: absolute; right: 100px; display: flex; align-items: center; gap: 10px; font-size: 0.6em;';
+    authContainer.style.cssText = 'position: absolute; right: 95px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
 
     if (user) {
       authContainer.innerHTML = `
@@ -369,9 +372,18 @@ async function uploadImage(base64Data, path) {
           ✕
         </button>
       `;
-      // Hide login overlay if it exists
-      const overlay = document.getElementById('login-overlay');
-      if (overlay) overlay.style.display = 'none';
+      // Check if user has completed the second stage (PIN)
+      if (isPinVerified) {
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) overlay.style.display = 'none';
+        const lockBtn = document.getElementById('nav-lock-btn');
+        if (lockBtn) lockBtn.style.display = 'inline-block';
+        applyRolePermissions();
+      } else {
+        showLoginOverlay();
+        const lockBtn = document.getElementById('nav-lock-btn');
+        if (lockBtn) lockBtn.style.display = 'none';
+      }
     } else {
       authContainer.innerHTML = `
         <button onclick="login()" class="btn" style="margin: 0; background: white; color: var(--primary); font-size: 0.8em; padding: 5px 12px; display: flex; align-items: center; gap: 8px; border-radius: 4px; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
@@ -381,24 +393,45 @@ async function uploadImage(base64Data, path) {
       `;
       // Ensure login overlay is visible
       showLoginOverlay();
+      const lockBtn = document.getElementById('nav-lock-btn');
+      if (lockBtn) lockBtn.style.display = 'none';
     }
 
     header.appendChild(authContainer);
   }
 
+  function lockApp() {
+    isPinVerified = false;
+    sessionStorage.removeItem('isPinVerified');
+    currentUserRole = null;
+    sessionStorage.removeItem('currentUserRole');
+    sessionStorage.removeItem('currentUserPermissions');
+    showLoginOverlay();
+    const lockBtn = document.getElementById('nav-lock-btn');
+    if (lockBtn) lockBtn.style.display = 'none';
+  }
+
   async function login() {
     const provider = new GoogleAuthProvider();
+    const btn = document.querySelector('#login-overlay button');
+    const originalContent = btn ? btn.innerHTML : '';
+    if (btn) btn.innerHTML = '<span class="spinner"></span> Signing in...';
+    
     try {
       await signInWithPopup(auth, provider);
       location.reload(); 
     } catch (error) {
       console.error("Login failed:", error);
       alert("Login failed: " + error.message);
+      if (btn) btn.innerHTML = originalContent;
     }
   }
 
   async function logout() {
     if (confirm("Are you sure you want to log out?")) {
+      sessionStorage.removeItem('currentUserRole');
+      sessionStorage.removeItem('currentUserPermissions');
+      sessionStorage.removeItem('isPinVerified');
       await signOut(auth);
       location.reload();
     }
@@ -430,6 +463,11 @@ async function uploadImage(base64Data, path) {
 
   // ===== Tabs =====
   function showTab(tabId, btn) {
+    const isManager = currentUserRole === 'manager';
+    if (!isManager && !currentUserPermissions.includes(tabId)) {
+      return alert("Access Denied: This section is restricted to Managers.");
+    }
+
     document.querySelectorAll('section').forEach(sec => sec.classList.remove('active')); 
     const activeSection = document.querySelector(`#${tabId}`);
     activeSection.classList.add('active');
@@ -471,6 +509,7 @@ async function uploadImage(base64Data, path) {
         renderInventoryReport(); // For the low stock report
         renderStockListTable(); // For the main stock table
         renderUnitList();
+        renderRestockHistoryTable(); // For the main stock table
         break;
       case 'reportsTab':
         populateReportFilters();
@@ -1856,6 +1895,11 @@ async function uploadImage(base64Data, path) {
   }
 
   function deleteTransaction(index) {
+    const pin = prompt("Enter Manager PIN to delete transaction:");
+    if (pin !== (settings.managerPIN || "1234")) {
+      return alert("Incorrect PIN. Access denied.");
+    }
+
     if (confirm(`Are you sure you want to permanently delete this transaction? This action cannot be undone.`)) {
       transactions.splice(index, 1);
       saveData();
@@ -2204,6 +2248,19 @@ async function uploadImage(base64Data, path) {
 
   // ===== Settings =====
   async function saveSettings() {
+    const pin = document.getElementById('managerPIN').value;
+    const confirmPin = document.getElementById('confirmManagerPIN').value;
+
+    // Enforce exactly 4 numeric digits
+    if (pin.length !== 4 || !/^\d+$/.test(pin)) {
+      return alert("Manager PIN must be exactly 4 numeric digits.");
+    }
+
+    // Match confirmation field
+    if (pin !== confirmPin) {
+      return alert("Manager PINs do not match. Please verify and try again.");
+    }
+
     settings.name = document.getElementById('companyName').value;
     settings.address = document.getElementById('companyAddress').value;
     settings.contact = document.getElementById('companyContact').value;
@@ -2211,6 +2268,7 @@ async function uploadImage(base64Data, path) {
     settings.lowStockThreshold = parseInt(document.getElementById('lowStockThreshold').value, 10) || 10;
     settings.defaultMarkup = parseFloat(document.getElementById('defaultMarkup').value) || 200;
     settings.taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+    settings.managerPIN = pin;
 
     const logoFile = document.getElementById('companyLogo').files[0];
     if (logoFile) {
@@ -2234,12 +2292,21 @@ async function uploadImage(base64Data, path) {
   }
 
   function loadSettings() {
-    document.getElementById('companyName').value = settings.name || '';
-    document.getElementById('companyAddress').value = settings.address || '';
-    document.getElementById('companyContact').value = settings.contact || '';
-    document.getElementById('currency').value = settings.currency || '$';
-    document.getElementById('lowStockThreshold').value = settings.lowStockThreshold || 10;
-    document.getElementById('taxRate').value = settings.taxRate || 0;
+    // Safe loading helper
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+
+    setVal('companyName', settings.name || '');
+    setVal('companyAddress', settings.address || '');
+    setVal('companyContact', settings.contact || '');
+    setVal('currency', settings.currency || '$');
+    setVal('lowStockThreshold', settings.lowStockThreshold || 10);
+    setVal('taxRate', settings.taxRate || 0);
+    setVal('managerPIN', settings.managerPIN || "1234");
+    setVal('confirmManagerPIN', settings.managerPIN || "1234");
+
     const logoPreview = document.getElementById('logoPreview');
     const logoUrl = sanitizeLogoUrl(settings.logo);
     if (logoUrl) {
@@ -2250,6 +2317,14 @@ async function uploadImage(base64Data, path) {
       logoPreview.style.display = 'none';
     }
     checkNotificationStatus();
+  }
+
+  function togglePINVisibility() {
+    const pin = document.getElementById('managerPIN');
+    const confirm = document.getElementById('confirmManagerPIN');
+    const type = pin.type === 'password' ? 'text' : 'password';
+    pin.type = type;
+    if (confirm) confirm.type = type;
   }
 
   function previewLogo(input) {
@@ -2274,6 +2349,8 @@ async function uploadImage(base64Data, path) {
       tr.innerHTML =
         `<td>${member.name}</td>` +
         `<td>${member.role}</td>` +
+        `<td>****</td>` +
+        `<td><button class="btn u-fs-08" style="padding: 4px 8px; margin: 0;" onclick="openStaffPermissionsModal(${i})">Manage</button></td>` +
         `<td style="text-align: right;"><button class="icon-btn" title="Delete Staff" onclick="deleteStaff(${i})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#dc3545" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button></td>`;
       tbody.appendChild(tr);
     });
@@ -2282,20 +2359,68 @@ async function uploadImage(base64Data, path) {
   function addStaff() {
     const nameInput = document.getElementById('staffNameInput');
     const roleInput = document.getElementById('staffRoleInput');
+    const pinInput = document.getElementById('staffPinInput');
     const name = nameInput.value.trim(); 
     const role = roleInput.value;
+    const pin = pinInput.value.trim();
 
-    if (!name) {
-      alert("Please enter a staff name.");
+    const checkboxes = document.querySelectorAll('#staffPermissionsContainer input[type="checkbox"]');
+    const permissions = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+    if (!name || pin.length !== 4) {
+      alert("Please enter a staff name and a 4-digit PIN.");
       return;
     }
 
-    staff.push({ name, role });
+    staff.push({ name, role, pin, permissions });
     nameInput.value = ''; // Clear input
     roleInput.value = ''; // Clear role input
+    pinInput.value = '';
+    checkboxes.forEach(cb => cb.checked = (cb.value === 'menuTab')); // Reset to default
     saveData();
     renderStaffList();
     populateServedByDropdown();
+  }
+
+  function openStaffPermissionsModal(index) {
+    const member = staff[index];
+    const container = document.getElementById('editPermissionsGrid');
+    document.getElementById('permStaffName').textContent = member.name;
+    document.getElementById('permStaffIndex').value = index;
+
+    const tabs = [
+      { id: 'dashboardTab', label: 'Dashboard' },
+      { id: 'menuTab', label: 'Shop' },
+      { id: 'addDishTab', label: 'Products' },
+      { id: 'categoryTab', label: 'Categories' },
+      { id: 'unitTab', label: 'Units' },
+      { id: 'staffTab', label: 'Staff' },
+      { id: 'customerTab', label: 'Customers' },
+      { id: 'stockTab', label: 'Stock' },
+      { id: 'transactionsTab', label: 'Sales' },
+      { id: 'reportsTab', label: 'Reports' },
+      { id: 'settingsTab', label: 'Settings' }
+    ];
+
+    container.innerHTML = tabs.map(tab => `
+      <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" value="${tab.id}" ${member.permissions?.includes(tab.id) ? 'checked' : ''}>
+        ${tab.label}
+      </label>
+    `).join('');
+
+    document.getElementById('staffPermissionsModal').style.display = 'flex';
+  }
+
+  function saveStaffPermissions() {
+    const index = parseInt(document.getElementById('permStaffIndex').value, 10);
+    const checkboxes = document.querySelectorAll('#editPermissionsGrid input[type="checkbox"]');
+    const permissions = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+    staff[index].permissions = permissions;
+    saveData();
+    document.getElementById('staffPermissionsModal').style.display = 'none';
+    alert("Permissions updated successfully.");
   }
 
   function populateServedByDropdown() {
@@ -2873,7 +2998,17 @@ async function uploadImage(base64Data, path) {
       return alert("Please enter a valid, non-negative number for the stock.");
     }
 
+    const oldStock = menu[index].stock;
     menu[index].stock = newStock;
+
+    restockHistory.unshift({
+      date: new Date().toISOString(),
+      itemName: menu[index].name,
+      adjustment: newStock - oldStock,
+      newTotal: newStock
+    });
+    if (restockHistory.length > 100) restockHistory.pop();
+
     saveData();
 
     // Re-render all relevant views
@@ -2960,6 +3095,14 @@ async function uploadImage(base64Data, path) {
         price,
         image: "https://placehold.co/100" // Default placeholder
       };
+
+      restockHistory.unshift({
+        date: new Date().toISOString(),
+        itemName: name,
+        adjustment: stock,
+        newTotal: stock,
+        note: 'Initial Stock'
+      });
       menu.push(newItem);
       alert(`Item "${name}" added successfully.`);
     }
@@ -2977,6 +3120,21 @@ async function uploadImage(base64Data, path) {
     document.getElementById('newStockItemPrice').value = '';
     document.getElementById('newStockItemStock').value = '';
     delete document.getElementById('newStockItemFormContainer').dataset.editingIndex;
+  }
+
+  function renderRestockHistoryTable() {
+    const tbody = document.getElementById('restockHistoryBody');
+    if (!tbody) return;
+    tbody.innerHTML = restockHistory.map(log => `
+      <tr>
+        <td class="u-fs-08">${new Date(log.date).toLocaleString()}</td>
+        <td class="u-fs-08">${log.itemName}</td>
+        <td class="u-fs-08 u-text-right u-bold" style="color: ${log.adjustment >= 0 ? '#28a745' : '#dc3545'};">
+          ${log.adjustment > 0 ? '+' : ''}${log.adjustment}
+        </td>
+        <td class="u-fs-08 u-text-right">${log.newTotal}</td>
+      </tr>
+    `).join('');
   }
 
   // ===== Real-Time Cloud Sync =====
@@ -3020,6 +3178,7 @@ async function uploadImage(base64Data, path) {
               dishCategories = cloudData.dishCategories || dishCategories;
               customers = cloudData.customers || customers;
               units = cloudData.units || units;
+              restockHistory = cloudData.restockHistory || restockHistory;
 
               // Mark initial load as complete
               isInitialLoadComplete = true;
@@ -3031,6 +3190,12 @@ async function uploadImage(base64Data, path) {
               refreshCurrentView();
               updateDashboard();
               applyTheme();
+
+              // Update login staff list if snapshot arrives while overlay is up
+              const list = document.getElementById('staffNamesList');
+              if (list) {
+                list.innerHTML = (staff || []).map(s => `<option value="${s.name}">`).join('');
+              }
 
               // Visual feedback on the sync button
               const statusEl = document.getElementById('connectivity-status');
@@ -3076,7 +3241,7 @@ async function uploadImage(base64Data, path) {
       'staffTab': renderStaffList,
       'customerTab': renderCustomerList,
       'settingsTab': () => { loadSettings(); },
-      'stockTab': () => { renderInventoryReport(); renderStockListTable(); renderUnitList(); },
+      'stockTab': () => { renderInventoryReport(); renderStockListTable(); renderUnitList(); renderRestockHistoryTable(); },
       'reportsTab': () => { populateReportFilters(); renderReport(); }
     };
     if (renderMap[activeTab.id]) renderMap[activeTab.id]();
@@ -3123,7 +3288,8 @@ async function uploadImage(base64Data, path) {
         loadState('staff'),
         loadState('dishCategories'),
         loadState('customers'),
-        loadState('units')
+        loadState('units'),
+        loadState('restockHistory')
       ]);
 
       // Initialize Connectivity Status Indicator
@@ -3141,6 +3307,7 @@ async function uploadImage(base64Data, path) {
       staff = localData[4] || defaultStaff;
       dishCategories = localData[5] || defaultDishCategories;
       customers = localData[6] || [];
+      restockHistory = localData[8] || [];
       units = localData[7] || [
         { full: 'Bottle', short: 'btl' },
         { full: 'Box', short: 'box' },
@@ -3245,39 +3412,189 @@ async function uploadImage(base64Data, path) {
 
     } catch (error) {
       console.error("Failed to initialize the application:", error);
-      document.body.innerHTML = '<h1>Error</h1><p>Could not initialize the application. Please ensure you are not in private browsing mode and that your browser supports IndexedDB.</p>';
+      document.body.innerHTML = `
+        <div style="padding: 40px; text-align: center; background: var(--primary); color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <h1 style="font-size: 4em; margin-bottom: 20px;">⚠️</h1>
+          <h2>App Initialization Failed</h2>
+          <p style="max-width: 400px; margin-bottom: 30px;">This usually happens in strict Private Browsing modes or if the local database is corrupted.</p>
+          <button onclick="location.reload()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px;">Try Refreshing</button>
+          <p style="margin-top: 20px; font-size: 0.8em; opacity: 0.8; cursor: pointer; text-decoration: underline;" onclick="if(confirm('This will wipe all local data. Continue?')) { indexedDB.deleteDatabase('posDB'); location.reload(); }">Reset Local Database</p>
+        </div>
+      `;
     }
   }
 
   function showLoginOverlay() {
     let overlay = document.getElementById('login-overlay');
     const logoUrl = sanitizeLogoUrl(settings?.logo);
-    // Use the app logo as a fallback if no company logo is found
     const displayLogo = logoUrl || 'assets/icons/icon-192x192.png';
-    // Display the logo image with an onerror fallback to ensure the app logo shows if the company URL is broken
     const logoHtml = `<img src="${displayLogo}" onerror="this.src='assets/icons/icon-192x192.png';" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px;">`;
 
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'login-overlay';
-      overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: var(--primary); z-index: 10000;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        color: white; transition: opacity 0.5s;
-      `;
+      overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--primary); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: opacity 0.5s;';
       document.body.appendChild(overlay);
     }
-    overlay.innerHTML = `
-      ${logoHtml}
-      <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
-      <p style="font-size: 1.2em; margin-bottom: 30px;">Please login to access your POS</p>
-      <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.2em; font-weight: bold; display: flex; align-items: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
-        Sign In with Google
-      </button>
+
+    const footerHtml = `
+      <div style="position: absolute; bottom: 30px; font-size: 0.8em; opacity: 0.7; display: flex; gap: 20px;">
+        <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
+        <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+      </div>
     `;
+
+    if (!currentUser) {
+      // Stage 1: Google Login
+      overlay.innerHTML = `
+        ${logoHtml}
+        <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
+        <p style="font-size: 1.2em; margin-bottom: 30px;">Account Login Required</p>
+        <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.2em; font-weight: bold; display: flex; align-items: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3); width: 100%; max-width: 300px; margin: 0;">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
+          Login with Google
+        </button>
+        ${footerHtml}
+      `;
+    } else {
+      // Stage 2: PIN Access
+      overlay.innerHTML = `
+        ${logoHtml}
+        <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
+        <p style="font-size: 1.2em; margin-bottom: 10px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
+        
+        <div style="display: flex; gap: 20px; margin-bottom: 20px; justify-content: center; width: 100%;">
+          <label style="cursor:pointer; display: flex; align-items: center; gap: 5px; font-weight: bold;"><input type="radio" name="loginRole" value="manager" checked onchange="document.getElementById('staff-name-container').style.display='none'"> 🛡️ Manager</label>
+          <label style="cursor:pointer; display: flex; align-items: center; gap: 5px; font-weight: bold;"><input type="radio" name="loginRole" value="staff" onchange="document.getElementById('staff-name-container').style.display='block'"> 👤 Staff</label>
+        </div>
+
+        <div id="staff-name-container" style="display: none; width: 100%; max-width: 300px; margin-bottom: 15px;">
+          <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Type or select staff name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
+          <datalist id="staffNamesList">
+            ${(staff || []).map(s => `<option value="${s.name}">`).join('')}
+          </datalist>
+        </div>
+        
+        <div id="pin-login-container" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px;">
+          <input type="password" id="loginPIN" placeholder="Enter PIN" maxlength="4" style="padding: 15px; border-radius: 8px; border: none; text-align: center; font-size: 1.5em; letter-spacing: 10px; width: 100%; color: var(--text);">
+          <button onclick="loginWithPIN()" class="btn" style="background: #28a745; color: white; padding: 12px; font-weight: bold; width: 100%; margin: 0;">Unlock System</button>
+          <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.8em; text-align: center; text-decoration: underline; opacity: 0.8; margin-top: 10px;">Forgot PIN?</a>
+          <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 30px; cursor: pointer;">Logout from Google Account</button>
+        </div>
+        ${footerHtml}
+      `;
+    }
     overlay.style.display = 'flex';
+  }
+
+  function applyRolePermissions() {
+    const isManager = currentUserRole === 'manager';
+    const nav = document.querySelector('nav');
+    if (!nav) return;
+    
+    nav.querySelectorAll('button').forEach(btn => {
+      const onclick = btn.getAttribute('onclick') || '';
+      const tabIdMatch = onclick.match(/showTab\('([^']+)'/);
+      if (tabIdMatch) {
+        const tabId = tabIdMatch[1];
+        if (isManager) {
+          btn.style.display = 'flex';
+        } else {
+          // Always show Shop and Refresh if not explicitly restricted
+          btn.style.display = currentUserPermissions.includes(tabId) ? 'flex' : 'none';
+        }
+      }
+    });
+
+    // Hide Manager-specific settings groups
+    const securityGroup = document.getElementById('securitySettingsGroup');
+    if (securityGroup) securityGroup.style.display = isManager ? 'block' : 'none';
+    
+    // If staff is accidentally on an unauthorized tab, kick them to their first allowed tab
+    const activeTab = document.querySelector('section.active');
+    if (!isManager && activeTab && !currentUserPermissions.includes(activeTab.id)) {
+      const targetTab = currentUserPermissions.includes('menuTab') ? 'menuTab' : currentUserPermissions[0];
+      if (targetTab) {
+        const targetBtn = nav.querySelector(`button[onclick*="${targetTab}"]`);
+        if (targetBtn) showTab(targetTab, targetBtn);
+      }
+    }
+  }
+
+  function loginWithPIN() {
+    const roleRadio = document.querySelector('input[name="loginRole"]:checked');
+    const selectedRole = roleRadio ? roleRadio.value : 'manager';
+    const enteredPin = document.getElementById('loginPIN').value;
+    
+    if (selectedRole === 'manager') {
+      const managerPin = settings.managerPIN || "1234";
+      if (enteredPin !== managerPin) {
+        alert("Incorrect Manager PIN.");
+        document.getElementById('loginPIN').value = '';
+        return;
+      }
+
+      isPinVerified = true;
+      sessionStorage.setItem('isPinVerified', 'true');
+      currentUserRole = 'manager';
+      sessionStorage.setItem('currentUserRole', 'manager');
+      currentUserPermissions = []; // Managers bypass checks
+      sessionStorage.removeItem('currentUserPermissions');
+      const overlay = document.getElementById('login-overlay');
+      if (overlay) overlay.style.display = 'none';
+      
+      const lockBtn = document.getElementById('nav-lock-btn');
+      if (lockBtn) lockBtn.style.display = 'inline-block';
+      
+      applyRolePermissions();
+      console.log("Unlocked as Manager");
+    } else { // Staff login
+      const staffName = document.getElementById('loginStaffName').value.trim();
+      if (!staffName) {
+        alert("Please enter or select a staff member name.");
+        return;
+      }
+
+      const staffMember = staff.find(s => s.name === staffName && s.pin === enteredPin);
+      if (staffMember) {
+        isPinVerified = true;
+        sessionStorage.setItem('isPinVerified', 'true');
+        currentUserRole = 'staff';
+        sessionStorage.setItem('currentUserRole', 'staff');
+        currentUserPermissions = staffMember.permissions || ['menuTab'];
+        sessionStorage.setItem('currentUserPermissions', JSON.stringify(currentUserPermissions));
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) overlay.style.display = 'none';
+
+        const lockBtn = document.getElementById('nav-lock-btn');
+        if (lockBtn) lockBtn.style.display = 'inline-block';
+        
+        // Auto-select the staff member in the shop tab
+        const servedBy = document.getElementById('servedBy');
+        if (servedBy) servedBy.value = staffMember.name;
+        
+        applyRolePermissions();
+        console.log(`Unlocked as Staff: ${staffMember.name}`);
+      } else {
+        alert("Incorrect PIN. Please try again.");
+        document.getElementById('loginPIN').value = '';
+      }
+    }
+  }
+
+  async function forgotPIN() {
+    if (!currentUser) return alert("Please sign in with Google first.");
+    
+    const roleRadio = document.querySelector('input[name="loginRole"]:checked');
+    const selectedRole = roleRadio ? roleRadio.value : 'manager';
+
+    if (selectedRole === 'staff') {
+      return alert("Staff members should contact the Manager to reset their PIN.");
+    }
+
+    if (confirm(`Send a PIN reset code to ${currentUser.email}?`)) {
+      alert(`A reset request has been simulated. In a production environment, an email would be sent to ${currentUser.email} with instructions.`);
+    }
   }
 
   mainInit();
@@ -3530,7 +3847,8 @@ async function uploadImage(base64Data, path) {
           saveState('staff', restoredData.staff || defaultStaff),
           saveState('dishCategories', restoredData.dishCategories || []),
           saveState('customers', restoredData.customers || []),
-          saveState('units', restoredData.units ||  [
+          saveState('restockHistory', restoredData.restockHistory || []),
+          saveState('units', restoredData.units || [
             { full: 'Bottle', short: 'btl' },
             { full: 'Box', short: 'box' },
             { full: 'Can', short: 'can' },
@@ -4057,7 +4375,7 @@ Object.assign(window, {
   // Functions
   toggleNav, showTab, renderMenu, addDish, generateRandomBarcode, editDish,
   addNewRecipeItemFromForm, updateRecipeItemUnit, updateRecipeTotals,
-  previewDishImage, previewLogo, toggleAddDishForm, openBillSplitModal, closeSplitBillModal,
+  previewDishImage, previewLogo, toggleAddDishForm, openBillSplitModal, closeSplitBillModal, renderRestockHistoryTable,
   addSplitBill, removeSplitBill, moveItemToFirstBill, moveItemToUnassigned,
   processSplitPayments, addToOrder, decreaseQty, processBill, updatePaymentTotals,
   toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel,
@@ -4074,5 +4392,5 @@ Object.assign(window, {
   manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, logout, syncNow,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   testLocalNotification, toggleNotifications, dismissNotification,
-  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme
+  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN
 });

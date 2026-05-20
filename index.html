@@ -207,6 +207,7 @@
       <button onclick="showTab('reportsTab', this)"><span>📈</span><span>Reports</span></button>
       <button onclick="showTab('settingsTab', this)"><span>⚙️</span><span>Settings</span></button>
       <button onclick="refreshApp()"><span>🔄</span><span>Refresh</span></button>
+      <button id="nav-lock-btn" onclick="lockApp()" title="Logout to PIN Screen" style="display: none;"><span>🔒</span><span>Lock PIN</span></button>
     </nav>
 
     <main>
@@ -224,6 +225,7 @@
             <select id="categoryFilter" onchange="renderMenu()" title="Filter by Category">
               <option value="">All Categories</option>
             </select>
+            <select id="servedBy" onchange="handleServerChange()" title="Select Staff Member"></select>
             <input type="text" id="menuSearch" placeholder="Search for a product..." onkeyup="renderMenu()">
             <button class="btn camera-scan-btn" onclick="startCameraScan()" title="Scan with Camera">📷</button>
             <button class="btn manual-barcode-btn" onclick="manualBarcodeInput()" title="Enter Barcode Manually">⌨️</button>
@@ -350,10 +352,25 @@
           <div class="input-row">
             <input type="text" id="staffNameInput" placeholder="Staff Name">
             <input type="text" id="staffRoleInput" placeholder="Staff Role (e.g., Server, Manager)">
+            <input type="password" id="staffPinInput" placeholder="4-digit PIN" maxlength="4" style="width: 100px;">
             <button class="btn" onclick="addStaff()">Add Staff</button>
           </div>
+          <div class="u-mt-10 u-fs-08" id="staffPermissionsContainer" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 10px;">
+            <span style="width: 100%; font-weight: bold;">New Staff Permissions:</span>
+            <label><input type="checkbox" value="dashboardTab"> Dashboard</label>
+            <label><input type="checkbox" value="menuTab" checked> Shop</label>
+            <label><input type="checkbox" value="addDishTab"> Products</label>
+            <label><input type="checkbox" value="categoryTab"> Categories</label>
+            <label><input type="checkbox" value="unitTab"> Units</label>
+            <label><input type="checkbox" value="staffTab"> Staff</label>
+            <label><input type="checkbox" value="customerTab"> Customers</label>
+            <label><input type="checkbox" value="stockTab"> Stock</label>
+            <label><input type="checkbox" value="transactionsTab"> Sales</label>
+            <label><input type="checkbox" value="reportsTab"> Reports</label>
+            <label><input type="checkbox" value="settingsTab"> Settings</label>
+          </div>
           <table class="u-mt-15">
-            <thead><tr><th>Name</th><th>Role</th><th style="text-align: right;">Action</th></tr></thead>
+            <thead><tr><th>Name</th><th>Role</th><th>PIN</th><th>Access</th><th style="text-align: right;">Action</th></tr></thead>
             <tbody id="staffListBody"></tbody>
           </table>
         </div>
@@ -555,6 +572,22 @@
             <button class="btn" onclick="saveSettings()">Save Settings</button>
           </div>
         </div>
+        <div class="settings-group" id="securitySettingsGroup">
+          <h4 class="settings-header">Security & Access</h4>
+          <div class="settings-content">
+            <p class="u-fs-08 u-text-muted">Set a Manager PIN to restrict deletions and sensitive actions.</p>
+            <div class="input-row">
+              <label for="managerPIN">Manager PIN:</label>
+              <input type="password" id="managerPIN" placeholder="4-digit PIN" maxlength="4">
+              <button type="button" onclick="togglePINVisibility()" class="btn" style="padding: 5px 10px; margin: 0;">👁️</button>
+            </div>
+            <div class="input-row">
+              <label for="confirmManagerPIN">Confirm PIN:</label>
+              <input type="password" id="confirmManagerPIN" placeholder="Confirm PIN" maxlength="4">
+            </div>
+            <button class="btn" onclick="saveSettings()">Update PIN</button>
+          </div>
+        </div>
         <div class="settings-group">
           <h4 class="settings-header">Barcode Scanner</h4>
           <div class="settings-content">
@@ -620,6 +653,21 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Staff Permissions Modal -->
+  <div id="staffPermissionsModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content" style="max-width: 500px;">
+      <h3>Manage Permissions for <span id="permStaffName"></span></h3>
+      <div id="editPermissionsGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px;">
+        <!-- Permissions checkboxes will be injected here -->
+      </div>
+      <input type="hidden" id="permStaffIndex">
+      <div class="receipt-actions">
+        <button class="btn btn-success" onclick="saveStaffPermissions()">Update Permissions</button>
+        <button class="btn cancel-btn" onclick="document.getElementById('staffPermissionsModal').style.display='none'">Cancel</button>
+      </div>
+    </div>
   </div>
 
 <!-- Change your script tag to include type="module" -->
