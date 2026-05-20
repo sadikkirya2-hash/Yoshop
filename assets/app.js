@@ -716,7 +716,6 @@ const analytics = getAnalytics(app);
     saveData();
     renderMenu();
     updateDashboard();
-    document.getElementById('servedBy').value = '';
     alert(`All split payments processed successfully!`);
   }
 
@@ -877,7 +876,7 @@ const analytics = getAnalytics(app);
 
     const transaction = {
       date: new Date().toISOString(),
-      customerName: document.getElementById('servedBy').value || 'N/A',
+      customerName: 'N/A',
       tableNo: 'Shop',
       items: [...currentOrder.items],
       total: finalTotal,
@@ -898,7 +897,6 @@ const analytics = getAnalytics(app);
     renderMenu();
     updateDashboard();
     document.getElementById('paymentModal').style.display = 'none';
-    document.getElementById('servedBy').value = '';
     alert(`Sale processed successfully!`);
   }
 
@@ -1035,7 +1033,7 @@ const analytics = getAnalytics(app);
         const totals = calculateTransactionTotals(currentOrder.items);
         currentTransaction = {
           date: new Date().toLocaleString(),
-          customerName: document.getElementById('servedBy').value || 'N/A',
+          customerName: 'N/A',
           tableNo: 'Shop',
           items: [...currentOrder.items],
           total: totals.total,
@@ -1118,15 +1116,7 @@ const analytics = getAnalytics(app);
     }
   });
 
-  function handleServerChange() {
-    // Check if the receipt modal is currently visible
-    const receiptModal = document.getElementById('receiptModal');
-    if (receiptModal.style.display === 'flex' && !receiptModal._transactionData) {
-      // If it's visible, re-render the preview to show the new server name
-      // Only do this for active orders, not historical ones.
-      previewOrder();
-    }
-  }
+
 
   function printReceipt() {
     // If a device is connected, the user might want to use that instead.
@@ -1145,7 +1135,7 @@ const analytics = getAnalytics(app);
       const totals = calculateTransactionTotals(currentOrder.items);
       printTransaction = {
         date: new Date().toLocaleString(),
-        customerName: document.getElementById('servedBy').value || 'N/A',
+        customerName: 'N/A',
         tableNo: 'Shop',
         items: [...currentOrder.items],
         total: totals.total,
@@ -1959,25 +1949,14 @@ const analytics = getAnalytics(app);
     roleInput.value = ''; // Clear role input
     saveData();
     renderStaffList();
-    populateServedByDropdown();
   }
 
-  function populateServedByDropdown() {
-    const select = document.getElementById('servedBy');
-    select.innerHTML = '<option value="">Sold By...</option>'; // Reset and add default
-    staff.forEach(member => {
-      const option = document.createElement('option');
-      option.value = member.name;
-      option.textContent = member.name;
-      select.appendChild(option);
-    });
-  }
+
 
   function deleteStaff(index) {
     if (confirm(`Are you sure you want to remove ${staff[index].name}?`)) {
       staff.splice(index, 1);
       saveData();
-      populateServedByDropdown();
       renderStaffList();
     }
   }
@@ -2716,7 +2695,6 @@ const analytics = getAnalytics(app);
       populateReportFilters();
       populateUnitDropdown();
       populateCategoryFilter();
-      populateServedByDropdown();
       updateCurrencyDisplay();
       setupSettingsAccordion();
       updatePrinterStatus(false);

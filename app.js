@@ -43,6 +43,7 @@ let currentUser = null;
 let currentUserRole = sessionStorage.getItem('currentUserRole');
 let currentUserPermissions = JSON.parse(sessionStorage.getItem('currentUserPermissions') || '[]');
 let isPinVerified = sessionStorage.getItem('isPinVerified') === 'true' && !!currentUserRole;
+let currentLoggedInStaffName = sessionStorage.getItem('currentLoggedInStaffName') || '';
 let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
 
 let syncFailureCount = 0;
@@ -162,6 +163,11 @@ async function uploadImage(base64Data, path) {
 
   // Helper to get logged in user's first name
   function getCurrentServerName() {
+    // Return logged-in staff member's name if available
+    if (currentLoggedInStaffName) {
+      return currentLoggedInStaffName;
+    }
+    // Otherwise, return Google user's name
     if (currentUser) {
       if (currentUser.displayName) return currentUser.displayName.trim().split(/\s+/)[0];
       if (currentUser.email) return currentUser.email.split('@')[0];
@@ -356,7 +362,6 @@ async function uploadImage(base64Data, path) {
   }
 
   function updateAuthUI(user) {
-    const header = document.querySelector('header');
     // Remove existing auth container if any
     const existingAuth = document.getElementById('auth-header-container');
     if (existingAuth) existingAuth.remove();
@@ -396,7 +401,7 @@ async function uploadImage(base64Data, path) {
       const lockBtn = document.getElementById('nav-lock-btn');
       if (lockBtn) lockBtn.style.display = 'none';
     }
-
+    const header = document.querySelector('header');
     header.appendChild(authContainer);
   }
 
@@ -406,6 +411,8 @@ async function uploadImage(base64Data, path) {
     currentUserRole = null;
     sessionStorage.removeItem('currentUserRole');
     sessionStorage.removeItem('currentUserPermissions');
+    currentLoggedInStaffName = '';
+    sessionStorage.removeItem('currentLoggedInStaffName');
     showLoginOverlay();
     const lockBtn = document.getElementById('nav-lock-btn');
     if (lockBtn) lockBtn.style.display = 'none';
@@ -414,7 +421,7 @@ async function uploadImage(base64Data, path) {
   async function login() {
     const provider = new GoogleAuthProvider();
     const btn = document.querySelector('#login-overlay button');
-    const originalContent = btn ? btn.innerHTML : '';
+    const originalContent = btn ? btn.innerHTML : 'Login with Google';
     if (btn) btn.innerHTML = '<span class="spinner"></span> Signing in...';
     
     try {
@@ -1208,7 +1215,7 @@ async function uploadImage(base64Data, path) {
     // Decrement stock
     currentOrder.items.forEach(orderItem => {
         const dish = menu.find(d => d.name === orderItem.name);
-        if (dish) {
+        if (dish && dish.name) { // Ensure dish and its name exist before deducting
             // This function will recursively deduct stock
             deductStock(dish.name, orderItem.qty);
         }
@@ -1217,7 +1224,7 @@ async function uploadImage(base64Data, path) {
 
     const transaction = {
       date: new Date().toISOString(),
-      customerName: getCurrentServerName(),
+      customerName: getCurrentServerName(), // Use the logged-in user's name
       tableNo: 'Shop',
       items: [...currentOrder.items],
       total: finalTotal,
@@ -1236,7 +1243,6 @@ async function uploadImage(base64Data, path) {
     delete activeOrders[CART_ID]; // Clear the order for the table
     saveData();
     renderMenu();
-    updateDashboard();
     document.getElementById('paymentModal').style.display = 'none';
     alert(`Sale processed successfully!`);
   }
@@ -1287,7 +1293,7 @@ async function uploadImage(base64Data, path) {
     // Base case: Item is a primary ingredient, deduct from its own stock.
     if (!dish.recipe || dish.recipe.length === 0) {
         if (dish.stock !== undefined) {
-            dish.stock -= quantity;
+            dish.stock = (dish.stock || 0) - quantity;
             if (dish.stock <= (settings.lowStockThreshold || 10)) {
                 sendLowStockNotification(dish.name, dish.stock);
             }
@@ -1457,16 +1463,6 @@ async function uploadImage(base64Data, path) {
     }
   });
 
-  function handleServerChange() {
-    // Check if the receipt modal is currently visible
-    const receiptModal = document.getElementById('receiptModal');
-    if (receiptModal.style.display === 'flex' && !receiptModal._transactionData) {
-      // If it's visible, re-render the preview to show the new server name
-      // Only do this for active orders, not historical ones.
-      previewOrder();
-    }
-  }
-
   function printReceipt() {
     // If a device is connected, the user might want to use that instead.
     if (printerDevice) {
@@ -1514,7 +1510,6 @@ async function uploadImage(base64Data, path) {
         <div><span>Transaction ID:</span> <span>${transactionId}</span></div>
         <div><span>Date:</span> <span>${new Date(date).toLocaleDateString()}</span></div>
         <div><span>Time:</span> <span>${new Date(date).toLocaleTimeString()}</span></div>
-        <div><span>Served By:</span> <span>${customerName}</span></div>
       </div>
       <div class="receipt-items">
         <div class="table-header"><div class="col-name">Item</div><div class="col-qty">Qty</div><div class="col-price">Price</div><div class="col-total">Total</div></div>
@@ -1878,7 +1873,6 @@ async function uploadImage(base64Data, path) {
           <div><span>Transaction ID:</span> <span>${transactionId}</span></div>
           <div><span>Date:</span> <span>${new Date(date).toLocaleDateString()}</span></div>
           <div><span>Time:</span> <span>${new Date(date).toLocaleTimeString()}</span></div>
-          <div><span>Served By:</span> <span>${customerName}</span></div>
         </div>
         <div class="receipt-items">
           <div class="table-header"><div class="col-name">Item</div><div class="col-qty">Qty</div><div class="col-price">Price</div><div class="col-total">Total</div></div>
@@ -2379,7 +2373,6 @@ async function uploadImage(base64Data, path) {
     checkboxes.forEach(cb => cb.checked = (cb.value === 'menuTab')); // Reset to default
     saveData();
     renderStaffList();
-    populateServedByDropdown();
   }
 
   function openStaffPermissionsModal(index) {
@@ -2423,23 +2416,10 @@ async function uploadImage(base64Data, path) {
     alert("Permissions updated successfully.");
   }
 
-  function populateServedByDropdown() {
-    const select = document.getElementById('servedBy');
-    if (!select) return;
-    select.innerHTML = '<option value="">Sold By...</option>'; // Reset and add default
-    staff.forEach(member => {
-      const option = document.createElement('option');
-      option.value = member.name;
-      option.textContent = member.name;
-      select.appendChild(option);
-    });
-  }
-
   function deleteStaff(index) {
     if (confirm(`Are you sure you want to remove ${staff[index].name}?`)) {
       staff.splice(index, 1);
       saveData();
-      populateServedByDropdown();
       renderStaffList();
     }
   }
@@ -3307,7 +3287,6 @@ async function uploadImage(base64Data, path) {
       staff = localData[4] || defaultStaff;
       dishCategories = localData[5] || defaultDishCategories;
       customers = localData[6] || [];
-      restockHistory = localData[8] || [];
       units = localData[7] || [
         { full: 'Bottle', short: 'btl' },
         { full: 'Box', short: 'box' },
@@ -3326,6 +3305,7 @@ async function uploadImage(base64Data, path) {
         { full: 'Pint', short: 'pt' },
         { full: 'Pound', short: 'lb' }
       ];
+      restockHistory = localData[8] || [];
 
       // START UI IMMEDIATELY
       applyTheme();
@@ -3362,8 +3342,6 @@ async function uploadImage(base64Data, path) {
       populateReportFilters();
       populateUnitDropdown();
       populateCategoryFilter();
-      populateServedByDropdown();
-      updateCurrencyDisplay();
       setupSettingsAccordion();
       updatePrinterStatus(false);
 
@@ -3540,6 +3518,8 @@ async function uploadImage(base64Data, path) {
       sessionStorage.setItem('currentUserRole', 'manager');
       currentUserPermissions = []; // Managers bypass checks
       sessionStorage.removeItem('currentUserPermissions');
+      currentLoggedInStaffName = 'Manager';
+      sessionStorage.setItem('currentLoggedInStaffName', 'Manager');
       const overlay = document.getElementById('login-overlay');
       if (overlay) overlay.style.display = 'none';
       
@@ -3563,15 +3543,13 @@ async function uploadImage(base64Data, path) {
         sessionStorage.setItem('currentUserRole', 'staff');
         currentUserPermissions = staffMember.permissions || ['menuTab'];
         sessionStorage.setItem('currentUserPermissions', JSON.stringify(currentUserPermissions));
+        currentLoggedInStaffName = staffMember.name;
+        sessionStorage.setItem('currentLoggedInStaffName', staffMember.name);
         const overlay = document.getElementById('login-overlay');
         if (overlay) overlay.style.display = 'none';
 
         const lockBtn = document.getElementById('nav-lock-btn');
         if (lockBtn) lockBtn.style.display = 'inline-block';
-        
-        // Auto-select the staff member in the shop tab
-        const servedBy = document.getElementById('servedBy');
-        if (servedBy) servedBy.value = staffMember.name;
         
         applyRolePermissions();
         console.log(`Unlocked as Staff: ${staffMember.name}`);
@@ -4370,7 +4348,7 @@ async function uploadImage(base64Data, path) {
 Object.assign(window, {
   // Data and State (Required for inline HTML references)
   menu, activeOrders, transactions, settings, staff, dishCategories, customers, units, auth, currentUser,
-  db, CART_ID, analytics, app,
+  db, CART_ID, analytics, app, dbFirestore,
 
   // Functions
   toggleNav, showTab, renderMenu, addDish, generateRandomBarcode, editDish,
@@ -4378,9 +4356,9 @@ Object.assign(window, {
   previewDishImage, previewLogo, toggleAddDishForm, openBillSplitModal, closeSplitBillModal, renderRestockHistoryTable,
   addSplitBill, removeSplitBill, moveItemToFirstBill, moveItemToUnassigned,
   processSplitPayments, addToOrder, decreaseQty, processBill, updatePaymentTotals,
-  toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel,
+  toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel, getCurrentServerName,
   deleteItem, previewOrder, downloadCurrentReceiptAsPDF, shareReceipt,
-  handleServerChange, printReceipt, connectUSBScanner, connectBluetoothScanner,
+  printReceipt, connectUSBScanner, connectBluetoothScanner,
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
   directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction,
   reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff,

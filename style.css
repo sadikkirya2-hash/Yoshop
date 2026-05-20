@@ -1062,14 +1062,7 @@
   display: inline-block;
 }
 
-#servedBy {
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  vertical-align: middle;
-  flex-grow: 0.3;
-  display: inline-block;
-}
+
 
 .camera-scan-btn {
   margin: 0 5px;
