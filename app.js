@@ -3841,9 +3841,16 @@ async function uploadImage(base64Data, path) {
             ${googleBtnText}
           </button>
           
-          <div style="margin-top: 40px; font-size: 0.8em; opacity: 0.7; display: flex; gap: 20px;">
-            <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
-            <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+          <div style="margin-top: 40px; font-size: 0.65em; opacity: 0.7; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%;">
+            <div style="display: flex; gap: 20px; font-size: 1.2em;">
+              <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
+              <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+            </div>
+            <div style="display: flex; gap: 12px; white-space: nowrap; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+              <span>📍 Uganda, Mbale Republic street</span>
+              <span>📞 watsap/call +256754350502</span>
+              <span>📧 sadikkirya@gmail.com</span>
+            </div>
           </div>
         </div>
       `;
@@ -3898,9 +3905,16 @@ async function uploadImage(base64Data, path) {
           <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.8em; text-align: center; text-decoration: underline; opacity: 0.8; margin-top: 10px;">Forgot PIN?</a>
           <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 30px; cursor: pointer;">Logout from Google Account</button>
         </div>
-        <div style="position: absolute; bottom: 30px; font-size: 0.8em; opacity: 0.7; display: flex; gap: 20px;">
-          <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
-          <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+        <div style="position: absolute; bottom: 20px; font-size: 0.65em; opacity: 0.7; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%;">
+          <div style="display: flex; gap: 20px; font-size: 1.2em;">
+            <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
+            <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+          </div>
+          <div style="display: flex; gap: 12px; white-space: nowrap; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <span>📍 Uganda, Mbale Republic street</span>
+            <span>📞 watsap/call +256754350502</span>
+            <span>📧 sadikkirya@gmail.com</span>
+          </div>
         </div>
       `;
     }
