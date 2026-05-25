@@ -3755,18 +3755,13 @@ async function uploadImage(base64Data, path) {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'login-overlay';
-      overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--primary); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: opacity 0.5s;';
+      overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--primary); z-index: 10000; display: flex; color: white; transition: opacity 0.5s;';
       document.body.appendChild(overlay);
     }
 
-    const footerHtml = `
-      <div style="position: absolute; bottom: 30px; font-size: 0.8em; opacity: 0.7; display: flex; gap: 20px;">
-        <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
-        <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
-      </div>
-    `;
-
     if (!currentUser) {
+      if (window._marketingInterval) clearInterval(window._marketingInterval);
+
       // Stage 1: Email Auth / Google Login
       const isRegister = mode === 'register';
       const title = isRegister ? 'Create Account' : 'Account Login Required';
@@ -3776,37 +3771,98 @@ async function uploadImage(base64Data, path) {
       const toggleMode = isRegister ? 'login' : 'register';
       const googleBtnText = isRegister ? 'Register with Google' : 'Login with Google';
 
+      overlay.style.flexDirection = 'row';
+      overlay.style.alignItems = 'stretch';
+      overlay.style.justifyContent = 'center';
+
       overlay.innerHTML = `
-        ${logoHtml}
-        <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
-        <p style="font-size: 1.2em; margin-bottom: 20px;">${title}</p>
-        
-        <div id="email-login-form" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; margin-bottom: 15px;">
-          ${isRegister ? `<input type="text" id="authName" placeholder="Full Name" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
-          <input type="email" id="authEmail" placeholder="Email Address" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
-          <input type="password" id="authPassword" placeholder="Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
-          ${isRegister ? `<input type="password" id="authConfirmPassword" placeholder="Confirm Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
-          <button onclick="${submitFn}" class="btn" style="background: #28a745; color: white; margin: 0; font-weight: bold; padding: 12px; border-radius: 8px; border: none; width: 100%;">${submitText}</button>
+        <div class="marketing-side animate-panel-left" style="flex: 1; background: rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1);">
+          ${logoHtml}
+          <h1 style="font-size: 3.5em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
+          <h2 style="font-weight: 300; margin-bottom: 30px; opacity: 0.9;">Modern POS for Smart Businesses</h2>
           
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
-            <a href="#" onclick="showLoginOverlay('${toggleMode}')" style="color: white; font-size: 0.8em; text-decoration: underline; opacity: 0.8;">${toggleText}</a>
-            ${!isRegister ? `<a href="#" onclick="handleForgotPassword()" style="color: white; font-size: 0.8em; text-decoration: underline; opacity: 0.8;">Forgot Password?</a>` : ''}
+          <div class="marketing-carousel" style="max-width: 400px; text-align: left;">
+            <div class="marketing-slide active">
+              <p style="font-size: 1.3em;">🚀 <strong>Fast & Reliable</strong></p>
+              <p style="opacity: 0.8;">Transactions that never lag. Built for speed with full offline support so your business never stops.</p>
+            </div>
+            <div class="marketing-slide">
+              <p style="font-size: 1.3em;">📊 <strong>Powerful Analytics</strong></p>
+              <p style="opacity: 0.8;">Make data-driven decisions with real-time dashboards and comprehensive sales reports at your fingertips.</p>
+            </div>
+            <div class="marketing-slide">
+              <p style="font-size: 1.3em;">📦 <strong>Smart Inventory</strong></p>
+              <p style="opacity: 0.8;">Automated stock tracking, recipe-based deductions, and low-stock alerts to keep your shelves full.</p>
+            </div>
+            <div class="marketing-slide">
+              <p style="font-size: 1.3em;">🔐 <strong>Enterprise Security</strong></p>
+              <p style="opacity: 0.8;">Protect your business with encrypted cloud sync and Manager PIN protection for sensitive operations.</p>
+            </div>
+          </div>
+
+          <div style="margin-top: 50px; display: flex; gap: 10px;">
+            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 1;"></span>
+            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
+            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
+            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
           </div>
         </div>
+        <div class="login-side animate-panel-right" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
+          <div style="margin-bottom: 20px; opacity: 0.8; transform: scale(0.8);">${logoHtml}</div>
+          <p style="font-size: 1.5em; margin-bottom: 25px; font-weight: bold;">${title}</p>
+          
+          <div id="email-login-form" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; margin-bottom: 15px;">
+            ${isRegister ? `<input type="text" id="authName" placeholder="Full Name" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
+            <input type="email" id="authEmail" placeholder="Email Address" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
+            <input type="password" id="authPassword" placeholder="Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
+            ${isRegister ? `<input type="password" id="authConfirmPassword" placeholder="Confirm Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
+            <button onclick="${submitFn}" class="btn" style="background: #28a745; color: white; margin: 0; font-weight: bold; padding: 12px; border-radius: 8px; border: none; width: 100%;">${submitText}</button>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+              <a href="#" onclick="showLoginOverlay('${toggleMode}')" style="color: white; font-size: 0.8em; text-decoration: underline; opacity: 0.8;">${toggleText}</a>
+              ${!isRegister ? `<a href="#" onclick="handleForgotPassword()" style="color: white; font-size: 0.8em; text-decoration: underline; opacity: 0.8;">Forgot Password?</a>` : ''}
+            </div>
+          </div>
 
-        <div style="width: 100%; max-width: 300px; text-align: center; margin: 10px 0; position: relative;">
-          <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.3);">
-          <span style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--primary); padding: 0 10px; font-size: 0.8em; opacity: 0.7;">OR</span>
+          <div style="width: 100%; max-width: 320px; text-align: center; margin: 10px 0; position: relative;">
+            <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.3);">
+            <span style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--primary); padding: 0 10px; font-size: 0.8em; opacity: 0.7;">OR</span>
+          </div>
+
+          <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.1em; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); width: 100%; max-width: 320px; margin: 0;">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
+            ${googleBtnText}
+          </button>
+          
+          <div style="margin-top: 40px; font-size: 0.8em; opacity: 0.7; display: flex; gap: 20px;">
+            <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
+            <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+          </div>
         </div>
-
-        <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.1em; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); width: 100%; max-width: 300px; margin: 0;">
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
-          ${googleBtnText}
-        </button>
-        ${footerHtml}
       `;
+
+      // Carousel Logic
+      const slides = overlay.querySelectorAll('.marketing-slide');
+      const dots = overlay.querySelectorAll('.carousel-dot');
+      let current = 0;
+      window._marketingInterval = setInterval(() => {
+        slides[current].classList.remove('active');
+        dots[current].style.opacity = "0.3";
+        
+        current = (current + 1) % slides.length;
+        
+        slides[current].classList.add('active');
+        dots[current].style.opacity = "1";
+      }, 4000);
+
     } else {
+      if (window._marketingInterval) clearInterval(window._marketingInterval);
+
       // Stage 2: PIN Access
+      overlay.style.flexDirection = 'column';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+
       overlay.innerHTML = `
         ${logoHtml}
         <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
@@ -3830,7 +3886,10 @@ async function uploadImage(base64Data, path) {
           <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.8em; text-align: center; text-decoration: underline; opacity: 0.8; margin-top: 10px;">Forgot PIN?</a>
           <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 30px; cursor: pointer;">Logout from Google Account</button>
         </div>
-        ${footerHtml}
+        <div style="position: absolute; bottom: 30px; font-size: 0.8em; opacity: 0.7; display: flex; gap: 20px;">
+          <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
+          <a href="#" style="color: white; text-decoration: none;">Terms of Service</a>
+        </div>
       `;
     }
     overlay.style.display = 'flex';
