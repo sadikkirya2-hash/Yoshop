@@ -3191,7 +3191,7 @@ async function uploadImage(base64Data, path) {
         appLayout.style.opacity = '1';
       }
       setTimeout(() => { if (splash) splash.style.display = 'none'; }, 800);
-    }, 500);
+    }, 2500);
   }
 
   // ===== Settings Accordion =====
@@ -3829,6 +3829,7 @@ async function uploadImage(base64Data, path) {
       overlay.innerHTML = `
         <div class="marketing-side animate-panel-left" style="flex: 1.2; background: rgba(0,0,0,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);">
           ${logoHtml}
+          <p style="font-style: italic; margin-top: -15px; margin-bottom: 20px; opacity: 0.9; font-weight: 300;">Empowering Your Business with Smart POS Solutions</p>
           <h1 style="font-size: 3.5em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
           <h2 style="font-weight: 300; margin-bottom: 30px; opacity: 0.9;">Modern POS for Smart Businesses</h2>
           
@@ -4216,6 +4217,10 @@ async function uploadImage(base64Data, path) {
 
     // Add to notification center
     addNotification('A new version of YoShop is available.', 'info', 'triggerAppUpdate(true)');
+    
+    // Make the badge pulse specifically for the update
+    const badge = document.getElementById('update-badge');
+    if (badge) badge.classList.add('pulse-badge');
     
     playNotificationSound();
 
