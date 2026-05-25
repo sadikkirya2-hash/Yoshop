@@ -6,7 +6,7 @@ import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebas
 
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, initializeFirestore, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, linkWithCredential, EmailAuthProvider, updatePassword, reauthenticateWithCredential, updateProfile } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -461,7 +461,9 @@ async function uploadImage(base64Data, path) {
     authContainer.style.cssText = 'position: absolute; right: 95px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
 
     if (user) {
+      const displayName = user.displayName ? user.displayName.split(' ')[0] : user.email.split('@')[0];
       authContainer.innerHTML = `
+        <span style="font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.2); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
         <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
         <button onclick="logout()" class="logout-icon-btn" data-tooltip="Logout">
           ✕
@@ -521,6 +523,115 @@ async function uploadImage(base64Data, path) {
       console.error("Login failed:", error);
       alert("Login failed: " + error.message);
       if (btn) btn.innerHTML = originalContent;
+    }
+  }
+
+  async function loginWithEmail() {
+    const email = document.getElementById('authEmail')?.value?.trim();
+    const password = document.getElementById('authPassword')?.value?.trim();
+    if (!email || !password) return alert("Please enter email and password.");
+    
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+        alert("Login failed: Incorrect email or password.");
+      } else {
+        alert("Login failed: " + error.message);
+      }
+    }
+  }
+
+  async function registerWithEmail() {
+    const emailInput = document.getElementById('authEmail');
+    const passwordInput = document.getElementById('authPassword');
+    const nameInput = document.getElementById('authName');
+    const confirmInput = document.getElementById('authConfirmPassword');
+
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value?.trim();
+    const name = nameInput?.value?.trim();
+    const confirmPassword = confirmInput?.value?.trim();
+
+    if (!email || !password) return alert("Please enter email and password.");
+    if (nameInput && !name) return alert("Please enter your name.");
+    if (confirmInput && password !== confirmPassword) return alert("Passwords do not match.");
+    
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return alert("Password must be at least 8 characters long, and include at least one uppercase letter, one lowercase letter, one number, and one special character.");
+    }
+
+    try {
+      if (auth.currentUser) {
+        // User is already signed in (e.g. Google), link email/pass so they can use either
+        const credential = EmailAuthProvider.credential(email, password);
+        await linkWithCredential(auth.currentUser, credential);
+        // Update name if provided and not already set
+        if (name && !auth.currentUser.displayName) {
+          await updateProfile(auth.currentUser, { displayName: name });
+        }
+        alert("Email login successfully added to your account! You can now log in with either Google or this password.");
+      } else {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        if (name) {
+          await updateProfile(userCredential.user, { displayName: name });
+        }
+        alert("Registration successful! You are now logged in.");
+      }
+    } catch (error) {
+      if (error.code === 'auth/email-already-in-use') {
+        alert("This email is already registered. If you previously used Google, try logging in with Google first, then add a password.");
+      } else {
+        alert("Registration failed: " + error.message);
+      }
+    }
+  }
+
+  async function handleForgotPassword() {
+    const email = document.getElementById('authEmail').value || prompt("Please enter your email address:");
+    if (!email) return;
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert("Password reset email sent! Please check your inbox.");
+    } catch (error) {
+      alert("Error: " + error.message);
+    }
+  }
+
+  /**
+   * Securely changes the user's password after re-authentication.
+   */
+  async function handleChangePassword() {
+    if (!currentUser) return alert("You must be logged in to change your password.");
+    
+    const isEmailUser = currentUser.providerData.some(p => p.providerId === 'password');
+    if (!isEmailUser) {
+      return alert("This feature is only available for accounts using email/password login. Google users should manage their password via Google settings.");
+    }
+
+    const currentPassword = prompt("For your security, please enter your CURRENT password:");
+    if (!currentPassword) return;
+
+    try {
+      // Secure Step 1: Re-authenticate the user
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      
+      // Secure Step 2: Get and validate new password
+      const newPassword = prompt("Enter your NEW password (minimum 6 characters):");
+      if (!newPassword) return;
+      if (newPassword.length < 6) return alert("Password must be at least 6 characters.");
+
+      await updatePassword(currentUser, newPassword);
+      alert("Password updated successfully!");
+    } catch (error) {
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        alert("Verification failed: Incorrect current password.");
+      } else {
+        alert("Error updating password: " + error.message);
+      }
     }
   }
 
@@ -3538,7 +3649,7 @@ async function uploadImage(base64Data, path) {
     }
   }
 
-  function showLoginOverlay() {
+  function showLoginOverlay(mode = 'login') {
     let overlay = document.getElementById('login-overlay');
     const logoUrl = sanitizeLogoUrl(settings?.logo);
     const displayLogo = logoUrl || 'assets/icons/icon-192x192.png';
@@ -3559,12 +3670,38 @@ async function uploadImage(base64Data, path) {
     `;
 
     if (!currentUser) {
-      // Stage 1: Google Login
+      // Stage 1: Email Auth / Google Login
+      const isRegister = mode === 'register';
+      const title = isRegister ? 'Create Account' : 'Account Login Required';
+      const submitText = isRegister ? 'Register' : 'Login';
+      const submitFn = isRegister ? 'registerWithEmail()' : 'loginWithEmail()';
+      const toggleText = isRegister ? 'Already have an account? Login' : "Don't have an account? Register";
+      const toggleMode = isRegister ? 'login' : 'register';
+
       overlay.innerHTML = `
         ${logoHtml}
         <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
-        <p style="font-size: 1.2em; margin-bottom: 30px;">Account Login Required</p>
-        <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.2em; font-weight: bold; display: flex; align-items: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3); width: 100%; max-width: 300px; margin: 0;">
+        <p style="font-size: 1.2em; margin-bottom: 20px;">${title}</p>
+        
+        <div id="email-login-form" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; margin-bottom: 15px;">
+          ${isRegister ? `<input type="text" id="authName" placeholder="Full Name" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
+          <input type="email" id="authEmail" placeholder="Email Address" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
+          <input type="password" id="authPassword" placeholder="Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
+          ${isRegister ? `<input type="password" id="authConfirmPassword" placeholder="Confirm Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
+          <button onclick="${submitFn}" class="btn" style="background: #28a745; color: white; margin: 0; font-weight: bold; padding: 12px; border-radius: 8px; border: none; width: 100%;">${submitText}</button>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+            <a href="#" onclick="showLoginOverlay('${toggleMode}')" style="color: white; font-size: 0.8em; text-decoration: underline; opacity: 0.8;">${toggleText}</a>
+            ${!isRegister ? `<a href="#" onclick="handleForgotPassword()" style="color: white; font-size: 0.8em; text-decoration: underline; opacity: 0.8;">Forgot Password?</a>` : ''}
+          </div>
+        </div>
+
+        <div style="width: 100%; max-width: 300px; text-align: center; margin: 10px 0; position: relative;">
+          <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.3);">
+          <span style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--primary); padding: 0 10px; font-size: 0.8em; opacity: 0.7;">OR</span>
+        </div>
+
+        <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.1em; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); width: 100%; max-width: 300px; margin: 0;">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
           Login with Google
         </button>
@@ -4507,15 +4644,15 @@ Object.assign(window, {
   deleteItem, previewOrder, downloadCurrentReceiptAsPDF, shareReceipt,
   printReceipt, connectUSBScanner, connectBluetoothScanner,
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
-  directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction,
+  directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction, handleChangePassword,
   reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff,
   resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
   toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme,
   renderStockListTable, editStockItem, toggleStockAdjustmentForm,
   saveStockAdjustment, toggleNewStockItemForm, saveNewStockItem,
   triggerAppUpdate, exportTransactionsToCSV, backupAllData, restoreData,
-  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, logout, syncNow,
+  manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, loginWithEmail, registerWithEmail, handleForgotPassword, logout, syncNow,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
-  testLocalNotification, toggleNotifications, dismissNotification,
+  showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange
 });
