@@ -27,7 +27,7 @@
     display: none;
   }
   /* Hide scrollbar for IE, Edge and Firefox */
-  html, body, main, .receipt-paper, .settings-content {
+  html, body, main, nav, .receipt-paper, .settings-content {
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
   }
@@ -185,6 +185,7 @@
     width: 80px; /* Width of the sidebar */
     z-index: 1000;
     box-shadow: 4px 0 15px rgba(0,0,0,0.1);
+    overflow-y: auto;
     transform: translateX(-100%); /* Hidden by default */
     transition: transform 0.3s ease-in-out;
   }
@@ -208,6 +209,7 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
+    flex-shrink: 0;
   }
   nav button span:first-child {
     font-size: 20px; /* Make icon slightly larger */
