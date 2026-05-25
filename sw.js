@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yobill-v15';
+const CACHE_NAME = 'yobill-v16'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
@@ -20,6 +20,7 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Forces the waiting service worker to become the active service worker.
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)

@@ -3717,7 +3717,8 @@ async function uploadImage(base64Data, path) {
   // Register Service Worker for PWA
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
+      // updateViaCache: 'none' forces the browser to check the server for sw.js changes on every check
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
         .then(registration => {
           console.log('Service Worker registered with scope:', registration.scope);
         
@@ -3736,10 +3737,17 @@ async function uploadImage(base64Data, path) {
           });
         });
 
-        // Check for updates every minute
+        // Check for updates every 30 seconds for "instant" feel
         setInterval(() => {
           registration.update();
-        }, 60 * 1000);
+        }, 30 * 1000);
+
+        // Immediately check for updates when the window is focused or tab becomes visible
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            registration.update();
+          }
+        });
       })
       .catch(err => {
         console.error('Service Worker registration failed:', err);
@@ -3841,14 +3849,17 @@ async function uploadImage(base64Data, path) {
   }
 
   function triggerAppUpdate(isManual = false) {
-    // If an automatic update is found during checkout, show notification but postpone reload
-    if (!isManual && isCheckoutActive()) {
-      showUpdateNotification();
-      console.log('[UPDATE] Checkout active, postponing automatic reload.');
-      return;
-    }
-
     navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return;
+
+      // If an automatic update is found during checkout, show notification but postpone reload.
+      // If it's a manual update (clicked "Update Now"), we reload regardless.
+      if (!isManual && isCheckoutActive() && reg.waiting) {
+        showUpdateNotification();
+        console.log('[UPDATE] Checkout active, postponing automatic reload.');
+        return;
+      }
+
       if (reg && reg.waiting) {
         // Send message to SW to skip waiting and activate
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
