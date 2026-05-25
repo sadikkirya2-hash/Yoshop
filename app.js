@@ -4880,6 +4880,7 @@ Object.assign(window, {
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
   directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction, handleChangePassword,
   reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff,
+  openStaffPermissionsModal, saveStaffPermissions,
   resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
   toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme,
   renderStockListTable, editStockItem, toggleStockAdjustmentForm,
