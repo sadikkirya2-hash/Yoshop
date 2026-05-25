@@ -1718,7 +1718,7 @@ async function uploadImage(base64Data, path) {
                 try {
                     await navigator.share({
                         title: 'Receipt',
-                        text: 'Here is your receipt from Yobill.',
+                        text: 'Here is your receipt from YoShop.',
                         files: [file]
                     });
                 } catch (err) {
@@ -1771,7 +1771,7 @@ async function uploadImage(base64Data, path) {
 
     const currencySymbol = settings.currency || '$';
     const logoUrl = sanitizeLogoUrl(settings.logo);
-    const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon-192x192.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
+    const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
     const itemsHtml = items.map(o => {
       const notesHtml = o.notes ? `<br><small style="font-style: italic;">- ${o.notes}</small>` : '';
       return `<div class="item-row"><div class="col-name">${o.name} ${notesHtml}</div><div class="col-qty">${o.qty}x</div><div class="col-price">${currencySymbol}${formatCurrency(o.price)}</div><div class="col-total">${currencySymbol}${formatCurrency(o.qty * o.price)}</div></div>`;
@@ -2032,7 +2032,7 @@ async function uploadImage(base64Data, path) {
     const testMessage = 
       '*** Printer Test ***\n' +
       'Connection Successful!\n' +
-      `App: ${settings.name || 'Yobill'}\n` +
+      `App: ${settings.name || 'YoShop'}\n` +
       `Date: ${new Date().toLocaleString()}\n`;
     sendDataToPrinter(testMessage);
   }
@@ -2156,7 +2156,7 @@ async function uploadImage(base64Data, path) {
         : '';
       
       const logoUrl = sanitizeLogoUrl(settings.logo);
-      const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon-192x192.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
+      const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
 
       const receiptHtml = `
         <div class="receipt-header">
@@ -2238,8 +2238,9 @@ async function uploadImage(base64Data, path) {
   // ===== Reports =====
   function populateReportFilters() {
     const staffSelect = document.getElementById('reportStaffFilter');
+    if (!staffSelect) return;
     staffSelect.innerHTML = '<option value="">All Staff</option>';
-    staff.forEach(member => {
+    staff.filter(s => s.isActive !== false).forEach(member => {
       staffSelect.innerHTML += `<option value="${member.name}">${member.name}</option>`;
     });
   }
@@ -2670,12 +2671,25 @@ async function uploadImage(base64Data, path) {
     tbody.innerHTML = '';
     staff.forEach((member, i) => {
       const tr = document.createElement('tr');
+      const isActive = member.isActive !== false;
+      const statusIcon = isActive ? 
+        `<button class="icon-btn" title="Deactivate Staff" onclick="toggleStaffStatus(${i})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#ffc107" viewBox="0 0 16 16"><path d="M15 8a6.973 6.973 0 0 0-1.71-4.584l-9.874 9.875A7 7 0 0 0 15 8M2.71 12.584l9.874-9.875a7 7 0 0 0-9.874 9.875zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8"/></svg></button>` : 
+        `<button class="icon-btn" title="Activate Staff" onclick="toggleStaffStatus(${i})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#28a745" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.317 8.704a.733.733 0 0 1 .01-1.05.733.733 0 0 1 1.05.01L7.31 10.51l5.426-6.54z"/></svg></button>`;
+      
+      const editIcon = `<button class="icon-btn" title="Edit Staff" onclick="editStaff(${i})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V12h2.293l6.5-6.5-.207-.207z"/></svg></button>`;
+      const deleteIcon = `<button class="icon-btn" title="Delete Staff" onclick="deleteStaff(${i})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#dc3545" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>`;
+
+      tr.style.opacity = isActive ? '1' : '0.5';
       tr.innerHTML =
-        `<td>${member.name}</td>` +
+        `<td>${member.name} ${isActive ? '' : '<small>(Inactive)</small>'}</td>` +
         `<td>${member.role}</td>` +
         `<td>****</td>` +
         `<td><button class="btn u-fs-08" style="padding: 4px 8px; margin: 0;" onclick="openStaffPermissionsModal(${i})">Manage</button></td>` +
-        `<td style="text-align: right;"><button class="icon-btn" title="Delete Staff" onclick="deleteStaff(${i})"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#dc3545" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button></td>`;
+        `<td style="text-align: right; white-space: nowrap;">
+          ${editIcon}
+          ${statusIcon}
+          ${deleteIcon}
+        </td>`;
       tbody.appendChild(tr);
     });
   }
@@ -2684,25 +2698,62 @@ async function uploadImage(base64Data, path) {
     const nameInput = document.getElementById('staffNameInput');
     const roleInput = document.getElementById('staffRoleInput');
     const pinInput = document.getElementById('staffPinInput');
+    const indexInput = document.getElementById('staffIndex');
+
     const name = nameInput.value.trim(); 
     const role = roleInput.value;
     const pin = pinInput.value.trim();
+    const index = indexInput.value;
 
     const checkboxes = document.querySelectorAll('#staffPermissionsContainer input[type="checkbox"]');
     const permissions = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 
-    if (!name || pin.length !== 4) {
+    if (!name || (index === '' && pin.length !== 4)) {
       alert("Please enter a staff name and a 4-digit PIN.");
       return;
     }
 
-    staff.push({ name, role, pin, permissions });
+    if (index !== '') {
+      const i = parseInt(index, 10);
+      staff[i] = { ...staff[i], name, role, permissions };
+      if (pin) staff[i].pin = pin; // Only update pin if provided
+      const addBtn = document.querySelector('#staffTab .form-panel .btn[onclick="addStaff()"]');
+      if (addBtn) addBtn.textContent = "Add Staff";
+    } else {
+      staff.push({ name, role, pin, permissions, isActive: true });
+    }
+
     nameInput.value = ''; // Clear input
     roleInput.value = ''; // Clear role input
     pinInput.value = '';
+    indexInput.value = '';
     checkboxes.forEach(cb => cb.checked = (cb.value === 'menuTab')); // Reset to default
     saveData();
     renderStaffList();
+    populateReportFilters();
+  }
+
+  function editStaff(index) {
+    const member = staff[index];
+    document.getElementById('staffNameInput').value = member.name;
+    document.getElementById('staffRoleInput').value = member.role;
+    document.getElementById('staffPinInput').value = member.pin;
+    document.getElementById('staffIndex').value = index;
+
+    const checkboxes = document.querySelectorAll('#staffPermissionsContainer input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+      cb.checked = member.permissions?.includes(cb.value);
+    });
+
+    const addBtn = document.querySelector('#staffTab .form-panel .btn[onclick="addStaff()"]');
+    if (addBtn) addBtn.textContent = "Update Staff";
+  }
+
+  function toggleStaffStatus(index) {
+    staff[index].isActive = staff[index].isActive === false ? true : false;
+    saveData();
+    renderStaffList();
+    populateReportFilters();
   }
 
   function openStaffPermissionsModal(index) {
@@ -3749,8 +3800,8 @@ async function uploadImage(base64Data, path) {
   function showLoginOverlay(mode = 'login') {
     let overlay = document.getElementById('login-overlay');
     const logoUrl = sanitizeLogoUrl(settings?.logo);
-    const displayLogo = logoUrl || 'assets/icons/icon-192x192.png';
-    const logoHtml = `<img src="${displayLogo}" onerror="this.src='assets/icons/icon-192x192.png';" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px;">`;
+    const displayLogo = logoUrl || 'assets/icons/icon.png';
+    const logoHtml = `<img src="${displayLogo}" onerror="this.src='assets/icons/icon.png';" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px;">`;
 
     if (!overlay) {
       overlay = document.createElement('div');
@@ -3906,7 +3957,7 @@ async function uploadImage(base64Data, path) {
             <p style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: left; width: 100%;">Select Staff Member:</p>
             <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Select Staff Name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
             <datalist id="staffNamesList">
-              ${(staff || []).map(s => `<option value="${s.name}">`).join('')}
+              ${(staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('')}
             </datalist>
           </div>
           
@@ -4045,6 +4096,11 @@ async function uploadImage(base64Data, path) {
 
       const staffMember = staff.find(s => s.name === staffName && s.pin === enteredPin);
       if (staffMember) {
+        if (staffMember.isActive === false) {
+          alert("This account is currently inactive. Please contact your manager.");
+          document.getElementById('loginPIN').value = '';
+          return;
+        }
         isPinVerified = true;
         sessionStorage.setItem('isPinVerified', 'true');
         currentUserRole = 'staff';
@@ -4185,8 +4241,8 @@ async function uploadImage(base64Data, path) {
     if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(registration => {
         registration.showNotification('Update Available', {
-          body: 'A new version of Yobill is available. Click to update.',
-          icon: 'assets/icons/icon-192x192.png',
+          body: 'A new version of YoShop is available. Click to update.',
+          icon: 'assets/icons/icon.png',
           tag: 'update-notification'
         });
       });
@@ -4752,14 +4808,14 @@ async function uploadImage(base64Data, path) {
         navigator.serviceWorker.ready.then(reg => {
           reg.showNotification('YoShop Notification', {
             body: 'Notifications are working correctly!',
-            icon: 'assets/icons/icon-192x192.png',
+            icon: 'assets/icons/icon.png',
             vibrate: [100, 50, 100]
           });
         });
       } else {
         new Notification('YoShop Notification', {
           body: 'Notifications are working correctly!',
-          icon: 'assets/icons/icon-192x192.png'
+          icon: 'assets/icons/icon.png'
         });
       }
     } else {
@@ -4847,7 +4903,7 @@ async function uploadImage(base64Data, path) {
       const title = 'Low Stock Alert';
       const options = {
         body: `${itemName} is running low! Only ${Number(currentStock).toFixed(1)} remaining.`,
-        icon: 'assets/icons/icon-192x192.png',
+        icon: 'assets/icons/icon.png',
         tag: 'low-stock-' + itemName,
         vibrate: [200, 100, 200]
       };
@@ -4879,7 +4935,7 @@ Object.assign(window, {
   printReceipt, connectUSBScanner, connectBluetoothScanner,
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
   directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction, handleChangePassword,
-  reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff,
+  reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff, editStaff, toggleStaffStatus,
   openStaffPermissionsModal, saveStaffPermissions,
   resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
   toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme,
