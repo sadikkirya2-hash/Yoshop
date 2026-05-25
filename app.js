@@ -461,9 +461,7 @@ async function uploadImage(base64Data, path) {
     authContainer.style.cssText = 'position: absolute; right: 95px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
 
     if (user) {
-      const displayName = user.displayName ? user.displayName.split(' ')[0] : user.email.split('@')[0];
       authContainer.innerHTML = `
-        <span style="font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.2); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
         <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
         <button onclick="logout()" class="logout-icon-btn" data-tooltip="Logout">
           ✕
