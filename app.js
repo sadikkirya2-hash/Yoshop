@@ -841,13 +841,20 @@ async function uploadImage(base64Data, path) {
           .forEach((dish, i) => {
             const item = document.createElement('div');
             const currentOrder = activeOrders[CART_ID] || { items: [] };
-            const orderItem = currentOrder.items.find(o => o.name === dish.name);
-            const quantity = orderItem ? orderItem.qty : 0;
-            const stock = calculateDishStock(dish, true);
-            const isOutOfStock = stock <= 0;
+
+            // Calculate available stock by subtracting what is already in all open carts
+            const totalInCarts = Object.values(activeOrders)
+                .flatMap(order => order.items || [])
+                .filter(item => item.name === dish.name)
+                .reduce((sum, item) => sum + item.qty, 0);
+
+            const quantity = currentOrder.items.find(o => o.name === dish.name && !o.notes)?.qty || 0;
+            const totalStock = calculateDishStock(dish, true);
+            const availableStock = Math.max(0, totalStock - totalInCarts);
+            const isOutOfStock = totalStock <= 0 || availableStock <= 0;
 
             let itemClasses = 'menu-item';
-            if (quantity > 0) itemClasses += ' active';
+            if (totalInCarts > 0) itemClasses += ' active';
             if (isOutOfStock) itemClasses += ' out-of-stock';
 
             item.className = itemClasses;
@@ -864,7 +871,7 @@ async function uploadImage(base64Data, path) {
                   <h4>${dish.name}</h4>
                   <p><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(dish.price)}</p>
                 </div>
-                <p class="stock-status ${isOutOfStock ? 'out-of-stock' : 'in-stock'}">Stock: ${stock}</p>
+                <p class="stock-status ${isOutOfStock ? 'out-of-stock' : 'in-stock'}">Available: ${availableStock}</p>
                 <div class="item-controls">
                   <button onclick="decreaseQty('${CART_ID}', '${dish.name}')" ${quantity === 0 ? 'disabled' : ''}>-</button>
                   <span class="qty-display">${quantity}</span>
@@ -1351,6 +1358,17 @@ async function uploadImage(base64Data, path) {
 
     const dish = menu.find(d => d.name === name);
     if (!dish) return alert("Item not found.");
+
+    // Check current availability across all open carts
+    const totalStock = calculateDishStock(dish, true);
+    const totalInCarts = Object.values(activeOrders)
+        .flatMap(order => order.items || [])
+        .filter(item => item.name === name)
+        .reduce((sum, item) => sum + item.qty, 0);
+
+    if (totalInCarts + 1 > totalStock) {
+        return alert(`Cannot add more "${name}". Only ${totalStock} units available in stock, and ${totalInCarts} are already in carts.`);
+    }
 
     // If notes are being added, we always create a new item.
     if (notes !== null) {

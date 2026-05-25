@@ -598,6 +598,7 @@
     opacity: 0.6;
     cursor: not-allowed;
     position: relative;
+    pointer-events: none;
   }
   .table-card .table-total {
     font-size: 0.8em;
