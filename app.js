@@ -3755,7 +3755,7 @@ async function uploadImage(base64Data, path) {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'login-overlay';
-      overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--primary); z-index: 10000; display: flex; color: white; transition: opacity 0.5s;';
+      overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, var(--primary) 0%, #d35400 100%); z-index: 10000; display: flex; color: white; transition: opacity 0.5s;';
       document.body.appendChild(overlay);
     }
 
@@ -3776,12 +3776,12 @@ async function uploadImage(base64Data, path) {
       overlay.style.justifyContent = 'center';
 
       overlay.innerHTML = `
-        <div class="marketing-side animate-panel-left" style="flex: 1; background: rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1);">
+        <div class="marketing-side animate-panel-left" style="flex: 1.2; background: rgba(0,0,0,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);">
           ${logoHtml}
           <h1 style="font-size: 3.5em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
           <h2 style="font-weight: 300; margin-bottom: 30px; opacity: 0.9;">Modern POS for Smart Businesses</h2>
           
-          <div class="marketing-carousel" style="max-width: 400px; text-align: left;">
+          <div class="marketing-carousel" style="max-width: 450px; text-align: left;">
             <div class="marketing-slide active">
               <p style="font-size: 1.3em;">🚀 <strong>Fast & Reliable</strong></p>
               <p style="opacity: 0.8;">Transactions that never lag. Built for speed with full offline support so your business never stops.</p>
@@ -3800,11 +3800,18 @@ async function uploadImage(base64Data, path) {
             </div>
           </div>
 
-          <div style="margin-top: 50px; display: flex; gap: 10px;">
+          <div style="margin-top: 20px; display: flex; gap: 10px; margin-bottom: 40px;">
             <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 1;"></span>
             <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
             <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
             <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
+          </div>
+
+          <div class="contact-info" style="width: 100%; max-width: 400px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 12px; font-size: 0.85em; text-align: left; line-height: 1.6;">
+            <p style="margin: 0 0 10px 0; font-weight: bold; opacity: 0.9;">For more infor and support contact:</p>
+            <p style="margin: 0 0 8px 0; display: flex; align-items: flex-start; gap: 10px;"><span style="font-size: 1.2em;">📍</span> <span>Uganda, Mbale Republic street</span></p>
+            <p style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 10px;"><span style="font-size: 1.2em;">📞</span> <span>watsap/call +256754350502</span></p>
+            <p style="margin: 0; display: flex; align-items: center; gap: 10px;"><span style="font-size: 1.2em;">📧</span> <span>sadikkirya@gmail.com</span></p>
           </div>
         </div>
         <div class="login-side animate-panel-right" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
@@ -3846,13 +3853,18 @@ async function uploadImage(base64Data, path) {
       const dots = overlay.querySelectorAll('.carousel-dot');
       let current = 0;
       window._marketingInterval = setInterval(() => {
-        slides[current].classList.remove('active');
-        dots[current].style.opacity = "0.3";
+        const prev = current;
+        slides[prev].classList.remove('active');
+        slides[prev].classList.add('exit');
+        dots[prev].style.opacity = "0.3";
         
         current = (current + 1) % slides.length;
         
+        slides[current].classList.remove('exit');
         slides[current].classList.add('active');
         dots[current].style.opacity = "1";
+
+        setTimeout(() => { slides[prev].classList.remove('exit'); }, 600);
       }, 4000);
 
     } else {
