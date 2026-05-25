@@ -2184,7 +2184,7 @@ async function uploadImage(base64Data, path) {
   }
 
   function deleteTransaction(index) {
-    const pin = prompt("Enter Manager PIN to delete transaction:");
+    const pin = prompt("Enter Admin PIN to delete transaction:");
     if (pin !== (settings.managerPIN || "1234")) {
       return alert("Incorrect PIN. Access denied.");
     }
@@ -3989,7 +3989,7 @@ async function uploadImage(base64Data, path) {
       if (pinInstruction) pinInstruction.textContent = "👤 Enter Staff PIN";
     } else {
       if (staffContainer) staffContainer.style.display = 'none';
-      if (pinInstruction) pinInstruction.textContent = "🛡️ Enter Manager PIN";
+      if (pinInstruction) pinInstruction.textContent = "🛡️ Enter Admin PIN";
     }
     
     const pinInput = document.getElementById('loginPIN');
@@ -4015,7 +4015,7 @@ async function uploadImage(base64Data, path) {
     if (selectedRole === 'manager') {
       const managerPin = settings.managerPIN || "1234";
       if (enteredPin !== managerPin) {
-        alert("Incorrect Manager PIN.");
+        alert("Incorrect Admin PIN.");
         document.getElementById('loginPIN').value = '';
         return;
       }
