@@ -3781,7 +3781,7 @@ async function uploadImage(base64Data, path) {
           <h1 style="font-size: 3.5em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
           <h2 style="font-weight: 300; margin-bottom: 30px; opacity: 0.9;">Modern POS for Smart Businesses</h2>
           
-          <div class="marketing-carousel" style="max-width: 450px; text-align: left;">
+          <div class="marketing-carousel" style="max-width: 450px;">
             <div class="marketing-slide active">
               <p style="font-size: 1.3em;">🚀 <strong>Fast & Reliable</strong></p>
               <p style="opacity: 0.8;">Transactions that never lag. Built for speed with full offline support so your business never stops.</p>
@@ -3807,7 +3807,7 @@ async function uploadImage(base64Data, path) {
             <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
           </div>
 
-          <div class="contact-info" style="width: 100%; max-width: 400px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 12px; font-size: 0.85em; text-align: left; line-height: 1.6;">
+          <div class="contact-info" style="width: 100%; max-width: 400px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 12px; font-size: 0.85em; line-height: 1.6;">
             <p style="margin: 0 0 10px 0; font-weight: bold; opacity: 0.9;">For more infor and support contact:</p>
             <p style="margin: 0 0 8px 0; display: flex; align-items: flex-start; gap: 10px;"><span style="font-size: 1.2em;">📍</span> <span>Uganda, Mbale Republic street</span></p>
             <p style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 10px;"><span style="font-size: 1.2em;">📞</span> <span>watsap/call +256754350502</span></p>

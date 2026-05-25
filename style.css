@@ -1286,14 +1286,29 @@
 
 /* Login Split Screen Utilities */
 @media (max-width: 768px) {
-  #login-overlay .marketing-side {
-    display: none !important;
-  }
   #login-overlay {
     flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
+    overflow-y: auto !important;
   }
+  #login-overlay .marketing-side {
+    flex: none !important;
+    padding: 40px 20px !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  #login-overlay .marketing-carousel {
+    text-align: center !important;
+  }
+  #login-overlay .contact-info {
+    text-align: center !important;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #login-overlay .contact-info p {
+    justify-content: center;
+    align-items: center !important;
+  }
+  
   #login-overlay .login-side {
     padding: 20px !important;
   }
@@ -1325,6 +1340,7 @@
   height: 220px;
   margin-top: 20px;
   overflow: hidden;
+  text-align: left;
 }
 
 .marketing-slide {
@@ -1336,3 +1352,7 @@
 }
 .marketing-slide.active { opacity: 1; transform: translateY(0); }
 .marketing-slide.exit { opacity: 0; transform: translateX(-100%); }
+
+.contact-info {
+  text-align: left;
+}
