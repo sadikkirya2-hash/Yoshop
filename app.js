@@ -76,14 +76,14 @@ async function uploadImage(base64Data, path) {
 
 // ===== IndexedDB Setup =====
   let db;
-  const DB_NAME = 'posDB';
   const DB_VERSION = 1;
   const STORE_NAME = 'appState';
   const CART_ID = 'SHOP_CART';
 
-  function initDB() {
+  function initDB(userId = 'guest') {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const dbName = `posDB_${userId}`;
+      const request = indexedDB.open(dbName, DB_VERSION);
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
@@ -94,7 +94,7 @@ async function uploadImage(base64Data, path) {
 
       request.onsuccess = (event) => {
         db = event.target.result;
-        console.log('Database initialized successfully.');
+        console.log(`Local database [${dbName}] initialized successfully.`);
         resolve(db);
       };
 
@@ -3251,7 +3251,9 @@ async function uploadImage(base64Data, path) {
         return; // Stop normal app initialization
       }
 
-      await initDB();
+      // Determine which local DB to open based on session
+      const lastUid = sessionStorage.getItem('currentUserUid') || 'guest';
+      await initDB(lastUid);
 
       // Request persistent storage to prevent browser from clearing data
       if (navigator.storage && navigator.storage.persist) {
@@ -3327,8 +3329,18 @@ async function uploadImage(base64Data, path) {
         updateAuthUI(user);
         if (user) {
           console.log("Logged in, syncing cloud data in background...");
+          
+          // If the user just logged in and it's different from the guest/previous DB,
+          // we update the session and reload to ensure clean initialization.
+          if (sessionStorage.getItem('currentUserUid') !== user.uid) {
+            sessionStorage.setItem('currentUserUid', user.uid);
+            // We don't reload here if this is the initial load triggered by login()
+            // but we ensure future initializations use this UID.
+          }
+          
           setupRealTimeSync(user.uid);
         } else {
+          sessionStorage.removeItem('currentUserUid');
           isInitialLoadComplete = true; // Enable saving for local guests
         }
       });
