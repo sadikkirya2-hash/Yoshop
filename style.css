@@ -146,13 +146,13 @@
   }
   #theme-toggle-header {
     position: absolute;
-    right: 15px;
+    right: 8px;
     font-size: 22px;
     color: white;
   }
   #update-notification-btn {
     position: absolute;
-    right: 60px;
+    right: 38px;
     font-size: 22px;
     color: white;
   }
@@ -730,7 +730,7 @@
 #header-printer-status {
   display: none;
   position: absolute;
-  right: 105px;
+  right: 68px;
 }
 
 /* Update Badge */

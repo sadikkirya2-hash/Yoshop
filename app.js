@@ -401,7 +401,7 @@ async function uploadImage(base64Data, path) {
       if (!header) return; // Safety check: if header isn't rendered yet, skip
       container = document.createElement('div');
       container.id = 'connectivity-container'; // Adjusted right position
-      container.style.cssText = 'position: absolute; right: 175px; display: flex; align-items: center; gap: 8px; font-size: 0.6em;';
+      container.style.cssText = 'position: absolute; right: 75px; display: flex; align-items: center; gap: 8px; font-size: 0.6em;';
       
       const statusEl = document.createElement('span');
       statusEl.id = 'connectivity-status';
@@ -458,15 +458,22 @@ async function uploadImage(base64Data, path) {
 
     const authContainer = document.createElement('div'); // Adjusted right position
     authContainer.id = 'auth-header-container';
-    authContainer.style.cssText = 'position: absolute; right: 95px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
+    authContainer.style.cssText = 'position: absolute; right: 110px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
 
     if (user) {
       authContainer.innerHTML = `
         <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
-        <button onclick="logout()" class="logout-icon-btn" data-tooltip="Logout">
-          ✕
-        </button>
       `;
+
+      const nav = document.querySelector('nav');
+      if (nav && !document.getElementById('nav-logout-btn')) {
+        const logoutBtn = document.createElement('button');
+        logoutBtn.id = 'nav-logout-btn';
+        logoutBtn.setAttribute('onclick', 'logout()');
+        logoutBtn.innerHTML = `<span>✕</span><span>Logout</span>`;
+        nav.appendChild(logoutBtn);
+      }
+
       // Check if user has completed the second stage (PIN)
       if (isPinVerified) {
         const overlay = document.getElementById('login-overlay');
@@ -480,6 +487,9 @@ async function uploadImage(base64Data, path) {
         if (lockBtn) lockBtn.style.display = 'none';
       }
     } else {
+      const navLogoutBtn = document.getElementById('nav-logout-btn');
+      if (navLogoutBtn) navLogoutBtn.remove();
+
       authContainer.innerHTML = `
         <button onclick="login()" class="btn" style="margin: 0; background: white; color: var(--primary); font-size: 0.8em; padding: 5px 12px; display: flex; align-items: center; gap: 8px; border-radius: 4px; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 16px; height: 16px;">
