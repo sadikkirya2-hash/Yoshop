@@ -3886,26 +3886,42 @@ async function uploadImage(base64Data, path) {
       overlay.innerHTML = `
         ${logoHtml}
         <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
-        <p style="font-size: 1.2em; margin-bottom: 10px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
+        <p style="font-size: 1.2em; margin-bottom: 20px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
         
-        <div style="display: flex; gap: 20px; margin-bottom: 20px; justify-content: center; width: 100%;">
-          <label style="cursor:pointer; display: flex; align-items: center; gap: 5px; font-weight: bold;"><input type="radio" name="loginRole" value="manager" checked onchange="document.getElementById('staff-name-container').style.display='none'"> 🛡️ Manager</label>
-          <label style="cursor:pointer; display: flex; align-items: center; gap: 5px; font-weight: bold;"><input type="radio" name="loginRole" value="staff" onchange="document.getElementById('staff-name-container').style.display='block'"> 👤 Staff</label>
+        <!-- Role Selection Stage -->
+        <div id="role-selection-container" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; justify-content: center; width: 100%; max-width: 220px;">
+          <button onclick="selectLoginRole('manager')" class="btn" style="padding: 10px; background: rgba(255,255,255,0.1); border: 1.5px solid white; font-size: 0.95em; font-weight: bold; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; transition: all 0.2s; border-radius: 8px; width: 100%;">
+            <span style="font-size: 1.2em;">🛡️</span> Admin
+          </button>
+          <button onclick="selectLoginRole('staff')" class="btn" style="padding: 10px; background: rgba(255,255,255,0.1); border: 1.5px solid white; font-size: 0.95em; font-weight: bold; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; transition: all 0.2s; border-radius: 8px; width: 100%;">
+            <span style="font-size: 1.2em;">👤</span> Staff
+          </button>
         </div>
 
-        <div id="staff-name-container" style="display: none; width: 100%; max-width: 300px; margin-bottom: 15px;">
-          <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Type or select staff name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
-          <datalist id="staffNamesList">
-            ${(staff || []).map(s => `<option value="${s.name}">`).join('')}
-          </datalist>
+        <!-- PIN Entry Stage (Hidden by default) -->
+        <div id="pin-entry-stage" style="display: none; width: 100%; flex-direction: column; align-items: center;">
+          <input type="hidden" id="selectedRoleInput" value="manager">
+          
+          <div id="staff-name-container" style="display: none; width: 100%; max-width: 300px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: left; width: 100%;">Select Staff Member:</p>
+            <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Select Staff Name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
+            <datalist id="staffNamesList">
+              ${(staff || []).map(s => `<option value="${s.name}">`).join('')}
+            </datalist>
+          </div>
+          
+          <div id="pin-login-container" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px;">
+            <p id="pin-instruction" style="margin-bottom: 5px; opacity: 0.9; text-align: center; font-weight: bold;"></p>
+            <input type="password" id="loginPIN" placeholder="PIN" maxlength="4" style="padding: 15px; border-radius: 8px; border: none; text-align: center; font-size: 1.5em; letter-spacing: 10px; width: 100%; color: var(--text);">
+            <button onclick="loginWithPIN()" class="btn" style="background: #28a745; color: white; padding: 12px; font-weight: bold; width: 100%; margin: 0; border-radius: 8px;">Unlock System</button>
+            <div style="display: flex; justify-content: space-between; margin-top: 15px; width: 100%;">
+                <a href="#" onclick="resetLoginStage()" style="color: white; font-size: 0.85em; text-decoration: underline; opacity: 0.8;">← Change Role</a>
+                <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.85em; text-decoration: underline; opacity: 0.8;">Forgot PIN?</a>
+            </div>
+          </div>
         </div>
-        
-        <div id="pin-login-container" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px;">
-          <input type="password" id="loginPIN" placeholder="Enter PIN" maxlength="4" style="padding: 15px; border-radius: 8px; border: none; text-align: center; font-size: 1.5em; letter-spacing: 10px; width: 100%; color: var(--text);">
-          <button onclick="loginWithPIN()" class="btn" style="background: #28a745; color: white; padding: 12px; font-weight: bold; width: 100%; margin: 0;">Unlock System</button>
-          <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.8em; text-align: center; text-decoration: underline; opacity: 0.8; margin-top: 10px;">Forgot PIN?</a>
-          <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 30px; cursor: pointer;">Logout from Google Account</button>
-        </div>
+
+        <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 40px; cursor: pointer; border-radius: 8px;">Logout from Google Account</button>
         <div style="position: absolute; bottom: 20px; font-size: 0.65em; opacity: 0.7; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
           <div style="display: flex; gap: 20px; font-size: 1.2em; margin-bottom: 2px;">
             <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
@@ -3957,9 +3973,43 @@ async function uploadImage(base64Data, path) {
     }
   }
 
+  function selectLoginRole(role) {
+    const roleContainer = document.getElementById('role-selection-container');
+    const pinStage = document.getElementById('pin-entry-stage');
+    const staffContainer = document.getElementById('staff-name-container');
+    const roleInput = document.getElementById('selectedRoleInput');
+    const pinInstruction = document.getElementById('pin-instruction');
+
+    if (roleContainer) roleContainer.style.display = 'none';
+    if (pinStage) pinStage.style.display = 'flex';
+    if (roleInput) roleInput.value = role;
+
+    if (role === 'staff') {
+      if (staffContainer) staffContainer.style.display = 'block';
+      if (pinInstruction) pinInstruction.textContent = "👤 Enter Staff PIN";
+    } else {
+      if (staffContainer) staffContainer.style.display = 'none';
+      if (pinInstruction) pinInstruction.textContent = "🛡️ Enter Manager PIN";
+    }
+    
+    const pinInput = document.getElementById('loginPIN');
+    if (pinInput) pinInput.focus();
+  }
+
+  function resetLoginStage() {
+    const roleContainer = document.getElementById('role-selection-container');
+    const pinStage = document.getElementById('pin-entry-stage');
+    const pinInput = document.getElementById('loginPIN');
+    const staffInput = document.getElementById('loginStaffName');
+
+    if (roleContainer) roleContainer.style.display = 'flex';
+    if (pinStage) pinStage.style.display = 'none';
+    if (pinInput) pinInput.value = '';
+    if (staffInput) staffInput.value = '';
+  }
+
   function loginWithPIN() {
-    const roleRadio = document.querySelector('input[name="loginRole"]:checked');
-    const selectedRole = roleRadio ? roleRadio.value : 'manager';
+    const selectedRole = document.getElementById('selectedRoleInput')?.value || 'manager';
     const enteredPin = document.getElementById('loginPIN').value;
     
     if (selectedRole === 'manager') {
@@ -4021,8 +4071,7 @@ async function uploadImage(base64Data, path) {
   async function forgotPIN() {
     if (!currentUser) return alert("Please sign in with Google first.");
     
-    const roleRadio = document.querySelector('input[name="loginRole"]:checked');
-    const selectedRole = roleRadio ? roleRadio.value : 'manager';
+    const selectedRole = document.getElementById('selectedRoleInput')?.value || 'manager';
 
     if (selectedRole === 'staff') {
       return alert("Staff members should contact the Manager to reset their PIN.");
@@ -4838,6 +4887,6 @@ Object.assign(window, {
   triggerAppUpdate, exportTransactionsToCSV, backupAllData, restoreData,
   manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, loginWithEmail, registerWithEmail, handleForgotPassword, logout, syncNow,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
-  showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification,
+  showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange
 });
