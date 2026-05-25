@@ -6,7 +6,7 @@ import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebas
 
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, initializeFirestore, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, linkWithCredential, EmailAuthProvider, updatePassword, reauthenticateWithCredential, updateProfile } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, linkWithCredential, EmailAuthProvider, updatePassword, reauthenticateWithCredential, updateProfile, deleteUser } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -600,38 +600,113 @@ async function uploadImage(base64Data, path) {
     }
   }
 
-  /**
-   * Securely changes the user's password after re-authentication.
-   */
-  async function handleChangePassword() {
-    if (!currentUser) return alert("You must be logged in to change your password.");
+  let activeAuthAction = null;
+
+  function openAuthModal(action) {
+    if (!currentUser) return alert("You must be logged in.");
+    activeAuthAction = action;
     
+    const modal = document.getElementById('authActionModal');
+    const title = document.getElementById('authModalTitle');
+    const desc = document.getElementById('authModalDescription');
+    const curPass = document.getElementById('currentPasswordField');
+    const newPass = document.getElementById('newPasswordFields');
+    const submitBtn = document.getElementById('authModalSubmitBtn');
+
+    // Reset fields
+    document.getElementById('authCurrentPassword').value = '';
+    document.getElementById('authNewPassword').value = '';
+    document.getElementById('authConfirmNewPassword').value = '';
+
     const isEmailUser = currentUser.providerData.some(p => p.providerId === 'password');
-    if (!isEmailUser) {
-      return alert("This feature is only available for accounts using email/password login. Google users should manage their password via Google settings.");
+
+    if (action === 'changePassword') {
+      title.textContent = "Change Password";
+      desc.textContent = "Enter your current password and a new secure password.";
+      curPass.style.display = 'block';
+      newPass.style.display = 'block';
+    } else if (action === 'linkPassword') {
+      title.textContent = "Create Email Login";
+      desc.textContent = "Set a password to allow signing in with your email address in addition to Google.";
+      curPass.style.display = 'none';
+      newPass.style.display = 'block';
+    } else if (action === 'deleteAccount') {
+      title.textContent = "Delete Account";
+      desc.textContent = "WARNING: This will permanently delete your account and all shop data. Please enter your password to confirm.";
+      curPass.style.display = isEmailUser ? 'block' : 'none';
+      newPass.style.display = 'none';
+      if (!isEmailUser) desc.textContent = "WARNING: This will permanently delete your account and all shop data. Confirm with the button below.";
     }
 
-    const currentPassword = prompt("For your security, please enter your CURRENT password:");
-    if (!currentPassword) return;
+    modal.style.display = 'flex';
+  }
+
+  function closeAuthModal() {
+    document.getElementById('authActionModal').style.display = 'none';
+    activeAuthAction = null;
+  }
+
+  async function submitAuthAction() {
+    const curPassValue = document.getElementById('authCurrentPassword').value;
+    const newPassValue = document.getElementById('authNewPassword').value;
+    const confirmPassValue = document.getElementById('authConfirmNewPassword').value;
+    
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    const isEmailUser = currentUser.providerData.some(p => p.providerId === 'password');
+
+    const submitBtn = document.getElementById('authModalSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Processing...";
 
     try {
-      // Secure Step 1: Re-authenticate the user
-      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
-      await reauthenticateWithCredential(currentUser, credential);
-      
-      // Secure Step 2: Get and validate new password
-      const newPassword = prompt("Enter your NEW password (minimum 6 characters):");
-      if (!newPassword) return;
-      if (newPassword.length < 6) return alert("Password must be at least 6 characters.");
-
-      await updatePassword(currentUser, newPassword);
-      alert("Password updated successfully!");
-    } catch (error) {
-      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        alert("Verification failed: Incorrect current password.");
-      } else {
-        alert("Error updating password: " + error.message);
+      if (activeAuthAction === 'changePassword' || (activeAuthAction === 'deleteAccount' && isEmailUser)) {
+        if (!curPassValue) throw new Error("Please enter your current password.");
+        const credential = EmailAuthProvider.credential(currentUser.email, curPassValue);
+        await reauthenticateWithCredential(currentUser, credential);
       }
+
+      if (activeAuthAction === 'changePassword' || activeAuthAction === 'linkPassword') {
+        if (!passwordRegex.test(newPassValue)) throw new Error("New password must be at least 8 characters long, and include uppercase, lowercase, numbers, and symbols.");
+        if (newPassValue !== confirmPassValue) throw new Error("New passwords do not match.");
+        
+        if (activeAuthAction === 'changePassword') {
+          await updatePassword(currentUser, newPassValue);
+          alert("Password updated successfully!");
+        } else {
+          const credential = EmailAuthProvider.credential(currentUser.email, newPassValue);
+          await linkWithCredential(currentUser, credential);
+          alert("Email login successfully added! You can now use either Google or this password.");
+        }
+      } else if (activeAuthAction === 'deleteAccount') {
+        if (confirm("FINAL WARNING: All your data will be lost. Are you absolutely sure?")) {
+          await deleteUser(currentUser);
+          alert("Account deleted.");
+          location.reload();
+          return;
+        }
+      }
+      
+      closeAuthModal();
+      loadSettings(); // Refresh UI
+    } catch (error) {
+      alert("Error: " + error.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Confirm";
+    }
+  }
+
+  // Expose these for the UI
+  window.openAuthModal = openAuthModal;
+  window.closeAuthModal = closeAuthModal;
+  window.submitAuthAction = submitAuthAction;
+
+  async function handleChangePassword() {
+    const isEmailUser = currentUser?.providerData.some(p => p.providerId === 'password');
+    if (isEmailUser) {
+      openAuthModal('changePassword');
+    } else {
+      alert("This account doesn't have a password. Use the 'Create Password' button instead.");
     }
   }
 
@@ -2519,6 +2594,28 @@ async function uploadImage(base64Data, path) {
   }
 
   function loadSettings() {
+    if (currentUser) {
+      const emailEl = document.getElementById('display-user-email');
+      if (emailEl) emailEl.textContent = currentUser.email;
+      
+      const providers = currentUser.providerData.map(p => p.providerId);
+      const isEmailUser = providers.includes('password');
+      const isGoogleUser = providers.includes('google.com');
+      
+      const badgeContainer = document.getElementById('auth-provider-badges');
+      if (badgeContainer) {
+        badgeContainer.innerHTML = `
+          ${isGoogleUser ? '<span style="background: #4285F4; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7em;">Google</span>' : ''}
+          ${isEmailUser ? '<span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7em;">Password</span>' : ''}
+        `;
+      }
+
+      const changeBtn = document.getElementById('change-password-btn');
+      const linkBtn = document.getElementById('link-password-btn');
+      if (changeBtn) changeBtn.style.display = isEmailUser ? 'block' : 'none';
+      if (linkBtn) linkBtn.style.display = (isGoogleUser && !isEmailUser) ? 'block' : 'none';
+    }
+
     // Safe loading helper
     const setVal = (id, val) => {
       const el = document.getElementById(id);
@@ -3677,6 +3774,7 @@ async function uploadImage(base64Data, path) {
       const submitFn = isRegister ? 'registerWithEmail()' : 'loginWithEmail()';
       const toggleText = isRegister ? 'Already have an account? Login' : "Don't have an account? Register";
       const toggleMode = isRegister ? 'login' : 'register';
+      const googleBtnText = isRegister ? 'Register with Google' : 'Login with Google';
 
       overlay.innerHTML = `
         ${logoHtml}
@@ -3703,7 +3801,7 @@ async function uploadImage(base64Data, path) {
 
         <button onclick="login()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px; font-size: 1.1em; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 15px; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); width: 100%; max-width: 300px; margin: 0;">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 24px; height: 24px;">
-          Login with Google
+          ${googleBtnText}
         </button>
         ${footerHtml}
       `;

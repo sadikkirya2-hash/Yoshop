@@ -585,9 +585,12 @@
               <input type="password" id="confirmManagerPIN" placeholder="Confirm PIN" maxlength="4">
             </div>
             <button class="btn" onclick="saveSettings()">Update PIN</button>
-            <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-              <p class="u-fs-08 u-text-muted">Account Security</p>
-              <button class="btn" onclick="handleChangePassword()" style="background: #6c757d; margin: 0;">Change Account Password</button>
+            <div id="account-security-section" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+              <p class="u-fs-08 u-text-muted" style="margin: 0;">Account: <span id="display-user-email" style="font-weight: bold; color: var(--text);">...</span></p>
+              <div id="auth-provider-badges" style="display: flex; gap: 5px; margin-bottom: 5px;"></div>
+              <button id="change-password-btn" class="btn" onclick="openAuthModal('changePassword')" style="background: #6c757d; margin: 0;">Change Password</button>
+              <button id="link-password-btn" class="btn" onclick="openAuthModal('linkPassword')" style="background: var(--primary); margin: 0; display: none;">Create Password for Email Login</button>
+              <button class="btn" onclick="openAuthModal('deleteAccount')" style="background: #dc3545; margin: 0;">Delete My Account</button>
             </div>
           </div>
         </div>
@@ -669,6 +672,29 @@
       <div class="receipt-actions">
         <button class="btn btn-success" onclick="saveStaffPermissions()">Update Permissions</button>
         <button class="btn cancel-btn" onclick="document.getElementById('staffPermissionsModal').style.display='none'">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Auth Action Modal -->
+  <div id="authActionModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content" style="max-width: 350px;">
+      <h3 id="authModalTitle">Account Security</h3>
+      <p id="authModalDescription" class="u-fs-08 u-text-muted" style="margin-bottom: 15px;"></p>
+      
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div id="currentPasswordField" style="display: none;">
+          <input type="password" id="authCurrentPassword" placeholder="Current Password" style="width: 100%; padding: 12px; border-radius: 8px;">
+        </div>
+        <div id="newPasswordFields" style="display: none;">
+          <input type="password" id="authNewPassword" placeholder="New Password" style="width: 100%; padding: 12px; border-radius: 8px;">
+          <input type="password" id="authConfirmNewPassword" placeholder="Confirm New Password" style="width: 100%; padding: 12px; border-radius: 8px; margin-top: 10px;">
+        </div>
+      </div>
+
+      <div class="receipt-actions">
+        <button class="btn btn-success" id="authModalSubmitBtn" onclick="submitAuthAction()">Confirm</button>
+        <button class="btn cancel-btn" onclick="closeAuthModal()">Cancel</button>
       </div>
     </div>
   </div>
