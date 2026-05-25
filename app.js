@@ -291,7 +291,8 @@ async function uploadImage(base64Data, path) {
    * Records a single transaction to local storage and Firestore sub-collection
    */
   async function recordTransaction(transaction) {
-    // 1. Add to local state array for UI immediate update
+    // 1. Mark as not synced initially and add to local state for immediate UI update
+    transaction.synced = false;
     transactions.unshift(transaction);
     
     // Keep local list at reasonable size for performance
@@ -304,7 +305,13 @@ async function uploadImage(base64Data, path) {
     if (currentUser && dbFirestore && navigator.onLine) {
       try {
         const txRef = collection(dbFirestore, "users", currentUser.uid, "transactions");
-        await addDoc(txRef, transaction);
+        // Strip the local 'synced' flag before sending to Firestore
+        const { synced, ...txData } = transaction;
+        await addDoc(txRef, txData);
+        
+        // Update local state to marked as synced
+        transaction.synced = true;
+        await saveState('transactions', transactions);
         console.log('[SYNC] Transaction saved to cloud collection');
       } catch (e) {
         handleFirebaseError(e, "Cloud Transaction Record");
@@ -313,15 +320,54 @@ async function uploadImage(base64Data, path) {
   }
 
   /**
+   * Pushes transactions created while offline to the cloud sub-collection
+   */
+  async function syncOfflineTransactions() {
+    if (!currentUser || !dbFirestore || !navigator.onLine) return;
+    const unsynced = transactions.filter(t => !t.synced);
+    if (unsynced.length === 0) return;
+
+    console.log(`[SYNC] Found ${unsynced.length} offline transactions. Syncing...`);
+    for (let tx of unsynced) {
+      try {
+        const txRef = collection(dbFirestore, "users", currentUser.uid, "transactions");
+        const { synced, ...txData } = tx;
+        await addDoc(txRef, txData);
+        tx.synced = true; // Update reference in the 'transactions' array
+      } catch (e) { break; } // Stop if we hit API errors
+    }
+    await saveState('transactions', transactions);
+    renderTransactions();
+  }
+
+  /**
    * Loads the latest transactions from the cloud collection
    */
-  async function loadTransactionsFromCloud(uid) {
+  async function loadTransactionsFromCloud(uid, startDate = null, endDate = null) {
     if (!dbFirestore) return;
     try {
-      const q = query(collection(dbFirestore, "users", uid, "transactions"), orderBy("date", "desc"), limit(200));
+      let txRef = collection(dbFirestore, "users", uid, "transactions");
+      let q;
+      
+      if (startDate || endDate) {
+        // Note: Range queries with OrderBy require a composite index in Firestore.
+        // If you see an error in the console, click the provided link to create the index.
+        const constraints = [orderBy("date", "desc")];
+        if (startDate) constraints.push(where("date", ">=", startDate));
+        if (endDate) constraints.push(where("date", "<=", endDate + "T23:59:59Z"));
+        q = query(txRef, ...constraints);
+      } else {
+        q = query(txRef, orderBy("date", "desc"), limit(200));
+      }
+
       const snap = await getDocs(q);
       const cloudTransactions = [];
-      snap.forEach(doc => cloudTransactions.push(doc.data()));
+      snap.forEach(doc => {
+        const data = doc.data();
+        data.synced = true;
+        cloudTransactions.push(data);
+      });
+
       if (cloudTransactions.length > 0) {
         transactions = cloudTransactions;
         saveState('transactions', transactions);
@@ -395,6 +441,7 @@ async function uploadImage(base64Data, path) {
     if (navigator.onLine && syncFailureCount === 0) {
       statusEl.textContent = '🟢';
       statusEl.title = 'Online & Synced';
+      syncOfflineTransactions();
     } else if (navigator.onLine && syncFailureCount > 0) {
       statusEl.textContent = '🔴';
       statusEl.title = `Sync error (${syncFailureCount} failures)`;
@@ -1814,13 +1861,21 @@ async function uploadImage(base64Data, path) {
   // ===== Transactions =====
   function renderTransactions() {
     const container = document.getElementById('transactionListContainer');
-    const filterDate = document.getElementById('transactionFilterDate').value;
+    const startDate = document.getElementById('transactionStartDate')?.value;
+    const endDate = document.getElementById('transactionEndDate')?.value;
+    
     let filteredTransactions = transactions;
-    if (filterDate) {
-      filteredTransactions = transactions.filter(t => t.date.startsWith(filterDate));
+
+    if (startDate || endDate) {
+      filteredTransactions = transactions.filter(t => {
+        const tDate = t.date.split('T')[0];
+        if (startDate && tDate < startDate) return false;
+        if (endDate && tDate > endDate) return false;
+        return true;
+      });
     }
-    // We need the original index to edit/delete, so we map over the original array if not filtering
-    const sourceArray = filterDate ? filteredTransactions : transactions;
+
+    const sourceArray = (startDate || endDate) ? filteredTransactions : transactions;
 
     const tableRows = sourceArray.map((t, i) => {
       const originalIndex = transactions.indexOf(t);
@@ -1829,9 +1884,10 @@ async function uploadImage(base64Data, path) {
       const iconReopen = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg>`;
       const iconDownload = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L6.354 8.146a.5.5 0 1 0-.708.708l2 2z"/></svg>`;
       const iconDelete = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#dc3545" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>`;
+      const syncStatus = t.synced ? '' : ' <span style="font-size:0.8em; color:orange;" title="Pending Sync">⏳</span>';
 
       tr.innerHTML = `
-        <td onclick="previewOrder(transactions[${originalIndex}])" class="u-cursor-pointer u-fs-08 u-nowrap">${new Date(t.date).toLocaleString()}</td>
+        <td onclick="previewOrder(transactions[${originalIndex}])" class="u-cursor-pointer u-fs-08 u-nowrap">${new Date(t.date).toLocaleString()}${syncStatus}</td>
         <td onclick="previewOrder(transactions[${originalIndex}])" class="u-cursor-pointer u-text-right u-fs-08 u-nowrap"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(t.total)}</td>
         <td class="u-text-right">
           <button class="icon-btn" title="Re-Open Bill" onclick="reopenTransaction(${originalIndex})">${iconReopen}</button>
@@ -1847,6 +1903,16 @@ async function uploadImage(base64Data, path) {
     tableRows.forEach(row => tbody.appendChild(row));
   }
   
+  /**
+   * Triggers a cloud search for transactions within the specified date range
+   */
+  async function searchTransactionsByRange() {
+    const start = document.getElementById('transactionStartDate')?.value;
+    const end = document.getElementById('transactionEndDate')?.value;
+    if (!start && !end) return alert("Please select a date range.");
+    if (currentUser) await loadTransactionsFromCloud(currentUser.uid, start, end);
+  }
+
   async function downloadBillAsPDF(transactionIndex) {
     const transaction = transactions[transactionIndex];
     const receiptModal = document.getElementById('receiptModal');
@@ -4442,4 +4508,5 @@ Object.assign(window, {
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   testLocalNotification, toggleNotifications, dismissNotification,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN
+  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange
 });
