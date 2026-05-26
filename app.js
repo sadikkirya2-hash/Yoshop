@@ -3903,44 +3903,8 @@ async function uploadImage(base64Data, path) {
       overlay.style.justifyContent = 'center';
 
       overlay.innerHTML = `
-        <div class="marketing-side animate-panel-left" style="flex: 1.2; background: rgba(0,0,0,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; text-align: center; border-right: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px);">
-          ${logoHtml}
-          <p style="font-style: italic; margin-top: -15px; margin-bottom: 20px; opacity: 0.9; font-weight: 300;">Empowering Your Business with Smart POS Solutions</p>
-          <h1 style="font-size: 3.5em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
-          <h2 style="font-weight: 300; margin-bottom: 30px; opacity: 0.9;">Modern POS for Smart Businesses</h2>
-          
-          <div class="marketing-carousel" style="max-width: 450px;">
-            <div class="marketing-slide active">
-              <p style="font-size: 1.3em;">🚀 <strong>Fast & Reliable</strong></p>
-              <p style="opacity: 0.8;">Transactions that never lag. Built for speed with full offline support so your business never stops.</p>
-            </div>
-            <div class="marketing-slide">
-              <p style="font-size: 1.3em;">📊 <strong>Powerful Analytics</strong></p>
-              <p style="opacity: 0.8;">Make data-driven decisions with real-time dashboards and comprehensive sales reports at your fingertips.</p>
-            </div>
-            <div class="marketing-slide">
-              <p style="font-size: 1.3em;">📦 <strong>Smart Inventory</strong></p>
-              <p style="opacity: 0.8;">Automated stock tracking, recipe-based deductions, and low-stock alerts to keep your shelves full.</p>
-            </div>
-            <div class="marketing-slide">
-              <p style="font-size: 1.3em;">🔐 <strong>Enterprise Security</strong></p>
-              <p style="opacity: 0.8;">Protect your business with encrypted cloud sync and Manager PIN protection for sensitive operations.</p>
-            </div>
-          </div>
-
-          <div style="margin-top: 20px; display: flex; gap: 10px; margin-bottom: 40px;">
-            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 1;"></span>
-            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
-            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
-            <span class="carousel-dot" style="width: 8px; height: 8px; background: white; border-radius: 50%; opacity: 0.3;"></span>
-          </div>
-
-          <div class="contact-info" style="width: 100%; max-width: 400px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 12px; font-size: 0.85em; line-height: 1.6;">
-            <p style="margin: 0 0 10px 0; font-weight: bold; opacity: 0.9;">For more infor and support contact:</p>
-            <p style="margin: 0 0 8px 0; display: flex; align-items: flex-start; gap: 10px;"><span style="font-size: 1.2em;">📍</span> <span>Uganda, Mbale Republic street</span></p>
-            <p style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 10px;"><span style="font-size: 1.2em;">📞</span> <span>watsap/call +256754350502</span></p>
-            <p style="margin: 0; display: flex; align-items: center; gap: 10px;"><span style="font-size: 1.2em;">📧</span> <span>sadikkirya@gmail.com</span></p>
-          </div>
+        <div class="marketing-side animate-panel-left" style="flex: 1.2; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; padding: 0; border-right: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); overflow: hidden;">
+          <img src="assets/icons/market.png" style="width: 100%; height: 100%; object-fit: cover;">
         </div>
         <div class="login-side animate-panel-right" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
           <div style="margin-bottom: 20px; opacity: 0.8; transform: scale(0.8);">${logoHtml}</div>
@@ -3983,26 +3947,6 @@ async function uploadImage(base64Data, path) {
           </div>
         </div>
       `;
-
-      // Carousel Logic
-      const slides = overlay.querySelectorAll('.marketing-slide');
-      const dots = overlay.querySelectorAll('.carousel-dot');
-      let current = 0;
-      window._marketingInterval = setInterval(() => {
-        const prev = current;
-        slides[prev].classList.remove('active');
-        slides[prev].classList.add('exit');
-        dots[prev].style.opacity = "0.3";
-        
-        current = (current + 1) % slides.length;
-        
-        slides[current].classList.remove('exit');
-        slides[current].classList.add('active');
-        dots[current].style.opacity = "1";
-
-        setTimeout(() => { slides[prev].classList.remove('exit'); }, 600);
-      }, 4000);
-
     } else {
       if (window._marketingInterval) clearInterval(window._marketingInterval);
 

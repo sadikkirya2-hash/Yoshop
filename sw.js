@@ -1,12 +1,11 @@
-const CACHE_NAME = 'yobill-v16'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yobill-v17'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json',
   '/app.js',
   '/style.css',
-  '/assets/icons/icon-192x192.png',
-  '/assets/icons/icon-512x512.png',
+  '/assets/icons/icon.png',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js',
