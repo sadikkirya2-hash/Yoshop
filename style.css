@@ -726,6 +726,42 @@
 
 /* Inline Styles Converted to CSS */
 
+/* Sync Status Styles */
+#header-sync-status {
+  position: absolute;
+  right: 98px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+#connectivity-status {
+  font-size: 18px;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+@keyframes sync-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+.sync-pulse {
+  animation: sync-pulse 0.6s ease-in-out;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s ease-in-out infinite;
+}
+
 /* Header Printer Status Button */
 #header-printer-status {
   display: none;

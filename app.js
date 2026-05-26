@@ -257,20 +257,20 @@ async function uploadImage(base64Data, path) {
             lastSyncTime = Date.now();
             syncFailureCount = 0; // Reset on success
 
-            // Update Last Synced UI Tooltip
-            const syncBtn = document.getElementById('sync-now-btn');
-            if (syncBtn) {
-              syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-            }
-            console.log('[SYNC] ✅ Cloud data synced successfully');
-          } catch (firestoreError) {
-            // Add pulse animation to connectivity status on successful sync
+            // Real-time pulse animation for visual feedback
             const statusEl = document.getElementById('connectivity-status');
             if (statusEl) {
                 statusEl.classList.add('sync-pulse');
                 setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
             }
 
+            // Update Last Synced UI Tooltip
+            const syncBtn = document.getElementById('header-sync-status');
+            if (syncBtn) {
+              syncBtn.setAttribute('data-tooltip', 'Last synced: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+            }
+            console.log('[SYNC] ✅ Cloud data synced successfully');
+          } catch (firestoreError) {
             syncFailureCount++;
             handleFirebaseError(firestoreError, "Firestore Sync");
           } finally {
@@ -379,9 +379,10 @@ async function uploadImage(base64Data, path) {
 
   async function syncNow() {
     if (!currentUser) return alert("Please login to sync data to the cloud.");
-    const syncBtn = document.getElementById('sync-now-btn');
-    const icon = '🔄';
-    syncBtn.innerHTML = '<span class="spinner"></span>';
+    const statusEl = document.getElementById('connectivity-status');
+    const syncBtn = document.getElementById('header-sync-status');
+    
+    statusEl.innerHTML = '<span class="spinner" style="width:14px; height:14px; border-width:2px; margin:0;"></span>';
     syncBtn.disabled = true;
     
     try {
@@ -389,55 +390,15 @@ async function uploadImage(base64Data, path) {
     } catch (e) {
       alert("Sync failed: " + e.message);
     } finally {
-      syncBtn.innerHTML = icon;
       syncBtn.disabled = false;
+      updateOnlineStatus();
     }
   }
 
   function updateOnlineStatus() {
-    let container = document.getElementById('connectivity-container');
-    if (!container) {
-      const header = document.querySelector('header');
-      if (!header) return; // Safety check: if header isn't rendered yet, skip
-      container = document.createElement('div');
-      container.id = 'connectivity-container'; // Adjusted right position
-      container.style.cssText = 'position: absolute; right: 75px; display: flex; align-items: center; gap: 8px; font-size: 0.6em;';
-      
-      const statusEl = document.createElement('span');
-      statusEl.id = 'connectivity-status';
-      statusEl.style.cssText = 'transition: all 0.3s; cursor: default;';
-      container.appendChild(statusEl);
-
-      // Add Spinner CSS
-      const style = document.createElement('style');
-      style.textContent = `
-        .spinner {
-          display: inline-block; width: 10px; height: 10px;
-          border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
-          border-top-color: #fff; animation: spin 1s ease-in-out infinite;
-          margin-right: 4px; vertical-align: middle;
-        }
-        @keyframes pulse-sync {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
-          70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
-        }
-        .sync-pulse { animation: pulse-sync 0.6s ease-in-out; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `;
-      document.head.appendChild(style);
-
-      const syncInfo = document.createElement('div');
-      syncInfo.style.cssText = 'display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; text-align: left;';
-      syncInfo.innerHTML = `
-        <button id="sync-now-btn" onclick="syncNow()" data-tooltip="Not synced yet" style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 1.2em; margin-top: 2px;">🔄</button>
-      `;
-      container.appendChild(syncInfo);
-      
-      header.appendChild(container);
-    }
-
     const statusEl = document.getElementById('connectivity-status');
+    if (!statusEl) return;
+
     if (navigator.onLine && syncFailureCount === 0) {
       statusEl.textContent = '🟢';
       statusEl.title = 'Online & Synced';
@@ -458,7 +419,7 @@ async function uploadImage(base64Data, path) {
 
     const authContainer = document.createElement('div'); // Adjusted right position
     authContainer.id = 'auth-header-container';
-    authContainer.style.cssText = 'position: absolute; right: 110px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
+    authContainer.style.cssText = 'position: absolute; right: 135px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
 
     if (user) {
       authContainer.innerHTML = `
