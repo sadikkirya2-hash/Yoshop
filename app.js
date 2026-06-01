@@ -892,11 +892,6 @@ async function uploadImage(base64Data, path) {
         };
     });
 
-    // Circular Dependency Validation to prevent stack overflow errors
-    if (hasCircularDependency(name, recipe)) {
-        console.warn(`[STOCK] Circular dependency detected for "${name}". The system will use physical stock counts for this item.`);
-    }
-
     const costPrice = totalRecipeCost;
     const price = parseFloat(document.getElementById('dishSellingPrice').value) || 0;
 
@@ -3389,15 +3384,13 @@ async function uploadImage(base64Data, path) {
     stockItems.forEach((item) => {
       const index = menu.indexOf(item);
       const stock = calculateDishStock(item, true);
-      const isSellable = (item.recipe && item.recipe.length > 0) || (parseFloat(item.price) > 0 && item.category);
-      const sellableBadge = isSellable ? '<span style="color: #28a745; margin-left: 5px;" title="This item is active in the Shop">🛒</span>' : '';
       const costPrice = item.costPrice || 0;
       const totalCost = stock * costPrice;
       const tr = document.createElement('tr');
 
 
       tr.innerHTML = `
-        <td class="u-fs-08 u-text-break">${item.name}${sellableBadge}</td> 
+        <td class="u-fs-08 u-text-break">${item.name}</td> 
         <td class="u-fs-08">${(item.recipe && item.recipe.length > 0) ? 'Recipe' : (item.unit || 'N/A')}</td>
         <td class="u-fs-08 u-text-right u-nowrap"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(costPrice)}</td>
         <td class="u-fs-08 u-text-right">${Number(stock).toFixed(1)}</td>
