@@ -46,6 +46,13 @@ let isPinVerified = sessionStorage.getItem('isPinVerified') === 'true' && !!curr
 let currentLoggedInStaffName = sessionStorage.getItem('currentLoggedInStaffName') || '';
 let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
 
+const defaultAppAdminSettings = {
+  username: "App Admin",
+  pin: "1997",
+  shopStatus: "active"
+};
+let appAdminSettings = { ...defaultAppAdminSettings };
+
 let syncFailureCount = 0;
 let syncDebounceTimer = null;
 let isDebouncing = false;
@@ -211,7 +218,8 @@ async function uploadImage(base64Data, path) {
         saveState('dishCategories', dishCategories || []),
         saveState('customers', customers || []),
         saveState('units', units || []),
-        saveState('restockHistory', restockHistory || [])
+        saveState('restockHistory', restockHistory || []),
+        saveState('appAdminSettings', appAdminSettings || defaultAppAdminSettings)
       ]);
 
       // Debounce cloud sync to prevent excessive Firebase writes
@@ -242,6 +250,7 @@ async function uploadImage(base64Data, path) {
               customers: customers || [],
               units: units || [],
               restockHistory: restockHistory || [],
+              appAdminSettings: appAdminSettings || defaultAppAdminSettings,
               lastUpdated: new Date().toISOString()
             }));
 
@@ -716,7 +725,8 @@ async function uploadImage(base64Data, path) {
   // ===== Tabs =====
   function showTab(tabId, btn) {
     const isManager = currentUserRole === 'manager';
-    if (!isManager && !currentUserPermissions.includes(tabId)) {
+    const isAppAdmin = currentUserRole === 'appAdmin';
+    if (!isManager && !isAppAdmin && !currentUserPermissions.includes(tabId)) {
       return alert("Access Denied: This section is restricted to Managers.");
     }
 
@@ -766,6 +776,12 @@ async function uploadImage(base64Data, path) {
       case 'reportsTab':
         populateReportFilters();
         renderReport();
+        break;
+      case 'appAdminTab':
+        document.getElementById('appAdminNameInput').value = appAdminSettings.username;
+        document.getElementById('appAdminPinInput').value = appAdminSettings.pin;
+        const statusDisplay = document.getElementById('currentShopStatusDisplay');
+        if (statusDisplay) statusDisplay.textContent = appAdminSettings.shopStatus.charAt(0).toUpperCase() + appAdminSettings.shopStatus.slice(1);
         break;
     }
   }
@@ -3715,6 +3731,7 @@ async function uploadImage(base64Data, path) {
               customers = cloudData.customers || customers;
               units = cloudData.units || units;
               restockHistory = cloudData.restockHistory || restockHistory;
+              appAdminSettings = cloudData.appAdminSettings || appAdminSettings;
 
               // Fetch transactions separately from sub-collection
               loadTransactionsFromCloud(uid);
@@ -3830,7 +3847,8 @@ async function uploadImage(base64Data, path) {
         loadState('dishCategories'),
         loadState('customers'),
         loadState('units'),
-        loadState('restockHistory')
+        loadState('restockHistory'),
+        loadState('appAdminSettings')
       ]);
 
       // Initialize Connectivity Status Indicator
@@ -3867,6 +3885,7 @@ async function uploadImage(base64Data, path) {
         { full: 'Pound', short: 'lb' }
       ];
       restockHistory = localData[8] || [];
+      appAdminSettings = localData[9] || defaultAppAdminSettings;
 
       // START UI IMMEDIATELY
       applyTheme();
@@ -3881,6 +3900,7 @@ async function uploadImage(base64Data, path) {
       renderMenu();
       loadSettings();
       updateVersionDisplay();
+      checkShopStatus();
 
       // Background Cloud Sync
       onAuthStateChanged(auth, async (user) => {
@@ -4066,6 +4086,7 @@ async function uploadImage(base64Data, path) {
             <p style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: left; width: 100%;">Who are you?</p>
             <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Select or type your name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
             <datalist id="staffNamesList">
+              <option value="${appAdminSettings.username}">
               <option value="Admin">
               ${(staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('')}
             </datalist>
@@ -4101,6 +4122,7 @@ async function uploadImage(base64Data, path) {
 
   function applyRolePermissions() {
     const isManager = currentUserRole === 'manager';
+    const isAppAdmin = currentUserRole === 'appAdmin';
     const nav = document.querySelector('nav');
     if (!nav) return;
     
@@ -4109,8 +4131,10 @@ async function uploadImage(base64Data, path) {
       const tabIdMatch = onclick.match(/showTab\('([^']+)'/);
       if (tabIdMatch) {
         const tabId = tabIdMatch[1];
-        if (isManager) {
+        if (isAppAdmin) {
           btn.style.display = 'flex';
+        } else if (isManager) {
+          btn.style.display = tabId === 'appAdminTab' ? 'none' : 'flex';
         } else {
           // Always show Shop and Refresh if not explicitly restricted
           btn.style.display = currentUserPermissions.includes(tabId) ? 'flex' : 'none';
@@ -4122,15 +4146,19 @@ async function uploadImage(base64Data, path) {
     const securityGroup = document.getElementById('securitySettingsGroup');
     if (securityGroup) securityGroup.style.display = isManager ? 'block' : 'none';
     
+    const appAdminBtn = document.getElementById('nav-app-admin-btn');
+    if (appAdminBtn) appAdminBtn.style.display = isAppAdmin ? 'flex' : 'none';
+    
     // If staff is accidentally on an unauthorized tab, kick them to their first allowed tab
     const activeTab = document.querySelector('section.active');
-    if (!isManager && activeTab && !currentUserPermissions.includes(activeTab.id)) {
+    if (!isManager && !isAppAdmin && activeTab && !currentUserPermissions.includes(activeTab.id)) {
       const targetTab = currentUserPermissions.includes('menuTab') ? 'menuTab' : currentUserPermissions[0];
       if (targetTab) {
         const targetBtn = nav.querySelector(`button[onclick*="${targetTab}"]`);
         if (targetBtn) showTab(targetTab, targetBtn);
       }
     }
+    checkShopStatus();
   }
 
   function loginWithPIN() {
@@ -4141,6 +4169,12 @@ async function uploadImage(base64Data, path) {
     if (!staffName) {
       alert("Please enter or select your name.");
       return;
+    }
+
+    // 1. Check App Admin (GOD MODE)
+    if (staffName === appAdminSettings.username && enteredPin === appAdminSettings.pin) {
+        completePinLogin('appAdmin', [], staffName);
+        return;
     }
 
     // 1. Check Master Admin PIN (Owner)
@@ -4190,7 +4224,7 @@ async function uploadImage(base64Data, path) {
       currentUserRole = role;
       sessionStorage.setItem('currentUserRole', role);
       
-      if (role === 'manager') {
+      if (role === 'manager' || role === 'appAdmin') {
           currentUserPermissions = []; // Managers bypass individual checks
           sessionStorage.removeItem('currentUserPermissions');
       } else {
@@ -4231,6 +4265,53 @@ async function uploadImage(base64Data, path) {
     if (confirm(`Send a PIN reset code to ${currentUser.email}?`)) {
       alert(`A reset request has been simulated. In a production environment, an email would be sent to ${currentUser.email} with instructions.`);
     }
+  }
+
+  function checkShopStatus() {
+    const isAppAdmin = currentUserRole === 'appAdmin';
+    const status = appAdminSettings.shopStatus || 'active';
+    const overlayId = 'shop-status-overlay';
+    let overlay = document.getElementById(overlayId);
+
+    if (status !== 'active' && !isAppAdmin && isPinVerified) {
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = overlayId;
+        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:20000; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; text-align:center; padding:20px;';
+        document.body.appendChild(overlay);
+      }
+      const label = status.toUpperCase();
+      overlay.innerHTML = `
+        <h1 style="color:#ff6b35; font-size:3em; margin-bottom:10px;">⚠️ SHOP ${label}</h1>
+        <p style="font-size:1.2em; max-width:500px;">Access to this shop has been restricted by the App Administrator.</p>
+        <button onclick="lockApp()" class="btn" style="margin-top:20px; padding:12px 30px;">Return to Login</button>
+      `;
+      overlay.style.display = 'flex';
+    } else if (overlay) {
+      overlay.style.display = 'none';
+    }
+  }
+
+  function updateAppAdminCredentials() {
+    const name = document.getElementById('appAdminNameInput').value.trim();
+    const pin = document.getElementById('appAdminPinInput').value.trim();
+
+    if (!name) return alert("Username required.");
+    if (pin.length !== 4 || !/^\d+$/.test(pin)) return alert("PIN must be 4 digits.");
+
+    appAdminSettings.username = name;
+    appAdminSettings.pin = pin;
+    saveData();
+    alert("App Admin credentials updated.");
+  }
+
+  function updateShopStatus(status) {
+    if (!confirm(`Switch shop to ${status.toUpperCase()}?`)) return;
+    appAdminSettings.shopStatus = status;
+    saveData();
+    const display = document.getElementById('currentShopStatusDisplay');
+    if (display) display.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    checkShopStatus();
   }
 
   mainInit();
@@ -5043,5 +5124,5 @@ Object.assign(window, {
   manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, loginWithEmail, registerWithEmail, handleForgotPassword, logout, syncNow,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
-  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange
+  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
 });
