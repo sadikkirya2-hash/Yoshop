@@ -877,6 +877,11 @@ async function uploadImage(base64Data, path) {
       buttonElement.textContent = 'Processing...';
     }
     
+    const dishIndexInput = document.getElementById('dishIndex').value;
+    const isUpdate = dishIndexInput !== '';
+    const existingDish = isUpdate ? menu[parseInt(dishIndexInput, 10)] : null;
+    const oldName = existingDish ? existingDish.name : null;
+
     let totalRecipeCost = 0;
     const recipe = Array.from(document.querySelectorAll('#recipeItemsContainer .recipe-item')).map(itemDiv => {
         totalRecipeCost += parseFloat(itemDiv.dataset.cost) || 0;
@@ -885,6 +890,15 @@ async function uploadImage(base64Data, path) {
             quantity: parseFloat(itemDiv.dataset.quantity)
         };
     });
+
+    // Circular Dependency Validation to prevent stack overflow errors
+    if (hasCircularDependency(name, recipe)) {
+        if (buttonElement) {
+            buttonElement.disabled = false;
+            buttonElement.textContent = isUpdate ? 'Update' : 'Save';
+        }
+        return alert(`Circular dependency detected! "${name}" cannot include itself (directly or indirectly) as an ingredient. Please check your recipe.`);
+    }
 
     const costPrice = totalRecipeCost;
     const price = parseFloat(document.getElementById('dishSellingPrice').value) || 0;
@@ -905,6 +919,15 @@ async function uploadImage(base64Data, path) {
 
         let dishData = { name, barcode, category, recipe, costPrice, price, image: image };
         menu[index] = dishData;
+
+        // Propagate name change to other product recipes if this dish is used as a sub-component
+        if (oldName && oldName !== name) {
+            menu.forEach(d => {
+                if (d.recipe) {
+                    d.recipe.forEach(c => { if (c.itemName === oldName) c.itemName = name; });
+                }
+            });
+        }
 
         // Update active orders immediately to sync name, price, and details
         Object.keys(activeOrders).forEach(cartId => {
@@ -1524,7 +1547,31 @@ async function uploadImage(base64Data, path) {
       return calculateTransactionTotals(items).total;
   }
 
-  function calculateDishStock(dish, isForDisplay = false) {
+  function hasCircularDependency(targetName, recipe, visited = new Set()) {
+    if (!recipe || !Array.isArray(recipe)) return false;
+    for (const component of recipe) {
+        if (component.itemName === targetName) return true;
+        if (visited.has(component.itemName)) continue;
+        
+        visited.add(component.itemName);
+        const componentDish = menu.find(d => d.name === component.itemName);
+        if (componentDish && componentDish.recipe) {
+            if (hasCircularDependency(targetName, componentDish.recipe, new Set(visited))) return true;
+        }
+    }
+    return false;
+  }
+
+  function calculateDishStock(dish, isForDisplay = false, visited = new Set()) {
+    if (!dish) return 0;
+
+    // Detect circular dependencies to prevent stack overflow
+    if (visited.has(dish.name)) {
+        console.error(`[STOCK] Circular dependency detected for item: ${dish.name}`);
+        return 0;
+    }
+    visited.add(dish.name);
+
     // Base case: If the item has no recipe, it's a primary ingredient. Return its own stock.
     if (!dish.recipe || dish.recipe.length === 0) {
         return dish.stock !== undefined ? dish.stock : (isForDisplay ? 0 : Infinity);
@@ -1538,7 +1585,7 @@ async function uploadImage(base64Data, path) {
         if (!componentDish) return 0; // A component of the recipe doesn't exist.
 
         // Recursively calculate the stock of the component dish.
-        const componentStock = calculateDishStock(componentDish, isForDisplay);
+        const componentStock = calculateDishStock(componentDish, isForDisplay, new Set(visited));
         
         const possibleServings = Math.floor(componentStock / component.quantity);
         if (possibleServings < maxPossibleServings) {
@@ -1549,21 +1596,28 @@ async function uploadImage(base64Data, path) {
     return maxPossibleServings === Infinity ? 0 : maxPossibleServings;
   }
 
-  function deductStock(itemName, quantity) {
+  function deductStock(itemName, quantity, visited = new Set()) {
     if (!itemName || quantity <= 0) return;
+
+    if (visited.has(itemName)) {
+        console.error(`[STOCK] Circular dependency detected while deducting stock for item: ${itemName}`);
+        return;
+    }
+    visited.add(itemName);
+
     const dish = menu.find(d => d.name === itemName);
     if (!dish) return;
 
     // Base case: Item is a primary ingredient, deduct from its own stock.
     if (!dish.recipe || dish.recipe.length === 0) {
         if (dish.stock !== undefined) {
-            dish.stock = (dish.stock || 0) - quantity;
+            dish.stock = (parseFloat(dish.stock) || 0) - quantity;
             if (dish.stock <= (settings.lowStockThreshold || 10)) {
                 sendLowStockNotification(dish.name, dish.stock);
             }
         }
     } else { // Recursive case: Item is a composite dish, deduct from its components.
-        dish.recipe.forEach(component => deductStock(component.itemName, component.quantity * quantity));
+        dish.recipe.forEach(component => deductStock(component.itemName, component.quantity * quantity, new Set(visited)));
     }
   }
   // ===== Dishes Table =====
@@ -1606,6 +1660,12 @@ async function uploadImage(base64Data, path) {
     const item = menu[index];
     if (!item) return;
 
+    // Protect against deleting items that are currently part of a product recipe
+    const isUsedInRecipe = menu.some(d => d.recipe && d.recipe.some(c => c.itemName === item.name));
+    if (isUsedInRecipe) {
+        return alert(`Cannot delete "${item.name}" because it is currently used as an ingredient in one or more products. Please remove it from all product recipes before deleting it from stock.`);
+    }
+
     if (confirm(`Are you sure you want to delete ${item.name}?`)) {
       menu.splice(index, 1);
       saveData(); // Persist the deletion
@@ -1617,12 +1677,6 @@ async function uploadImage(base64Data, path) {
       try { renderInventoryReport(); } catch (e) { console.error("Error updating inventory:", e); }
       try { updateDashboard(); } catch (e) { console.error("Error updating dashboard:", e); }
       
-      try { renderMenu(); } catch (e) { console.error("Error updating menu:", e); }
-      
-      try { renderDishesTable(); } catch (e) { console.error("Error updating dishes:", e); }
-      try { renderStockListTable(); } catch (e) { console.error("Error updating stock:", e); }
-      try { renderInventoryReport(); } catch (e) { console.error("Error updating inventory:", e); }
-      try { updateDashboard(); } catch (e) { console.error("Error updating dashboard:", e); }
       saveData(); // Persist the deletion
     }
   }
@@ -3396,6 +3450,32 @@ async function uploadImage(base64Data, path) {
       return alert("Please enter a valid, non-negative number for the stock.");
     }
 
+    // Warning for zero stock if the item is used in popular products
+    if (newStock === 0) {
+        const itemName = menu[index].name;
+        const dependentDishes = menu.filter(d => d.recipe && d.recipe.some(c => c.itemName === itemName));
+        
+        if (dependentDishes.length > 0) {
+            // Identify top 5 best-selling items from transaction history
+            const itemSales = transactions.flatMap(t => t.items || []).reduce((acc, item) => {
+                acc[item.name] = (acc[item.name] || 0) + (item.qty || 0);
+                return acc;
+            }, {});
+            
+            const topSellers = Object.entries(itemSales)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 5)
+                .map(([name]) => name);
+
+            const affectedPopular = dependentDishes.filter(d => topSellers.includes(d.name)).map(d => d.name);
+
+            if (affectedPopular.length > 0) {
+                const proceed = confirm(`Warning: Setting stock to zero for "${itemName}" will make these popular products OUT OF STOCK:\n\n${affectedPopular.join('\n')}\n\nAre you sure you want to proceed?`);
+                if (!proceed) return;
+            }
+        }
+    }
+
     const oldStock = menu[index].stock;
     menu[index].stock = newStock;
 
@@ -3461,11 +3541,40 @@ async function uploadImage(base64Data, path) {
 
     if (itemIndex) {
       // Update existing item
-      const item = menu[parseInt(itemIndex, 10)];
+      const index = parseInt(itemIndex, 10);
+      const item = menu[index];
+      const oldName = item.name;
+
       item.name = name;
       item.unit = unit;
       item.costPrice = costPrice;
       item.stock = stock;
+
+      // If name changed, update all recipes and active orders to keep the app working perfectly
+      if (oldName !== name) {
+          // Identify which products will be affected by this rename
+          const affectedProducts = menu.filter(d => d.recipe && d.recipe.some(c => c.itemName === oldName)).map(d => d.name);
+          
+          if (affectedProducts.length > 0) {
+              const confirmRename = confirm(`Renaming "${oldName}" to "${name}" will automatically update recipes for the following products:\n\n${affectedProducts.join('\n')}\n\nDo you want to proceed?`);
+              if (!confirmRename) return;
+          }
+
+          menu.forEach(d => {
+              if (d.recipe) {
+                  d.recipe.forEach(c => { if (c.itemName === oldName) c.itemName = name; });
+              }
+          });
+          Object.keys(activeOrders).forEach(cartId => {
+              if (activeOrders[cartId].items) {
+                  activeOrders[cartId].items.forEach(orderItem => {
+                      if (orderItem.name === oldName) {
+                          orderItem.name = name;
+                      }
+                  });
+              }
+          });
+      }
       
       if (sellingPriceInput && !isNaN(parseFloat(sellingPriceInput))) {
           item.price = parseFloat(sellingPriceInput);
