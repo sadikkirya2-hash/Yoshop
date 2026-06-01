@@ -3733,7 +3733,7 @@ async function uploadImage(base64Data, path) {
               // Update login staff list if snapshot arrives while overlay is up
               const list = document.getElementById('staffNamesList');
               if (list) {
-                list.innerHTML = (staff || []).map(s => `<option value="${s.name}">`).join('');
+                list.innerHTML = '<option value="Admin">' + (staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('');
               }
 
               // Visual feedback on the sync button
@@ -4060,34 +4060,22 @@ async function uploadImage(base64Data, path) {
         <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
         <p style="font-size: 1.2em; margin-bottom: 20px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
         
-        <!-- Role Selection Stage -->
-        <div id="role-selection-container" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; justify-content: center; width: 100%; max-width: 220px;">
-          <button onclick="selectLoginRole('manager')" class="btn" style="padding: 10px; background: rgba(255,255,255,0.1); border: 1.5px solid white; font-size: 0.95em; font-weight: bold; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; transition: all 0.2s; border-radius: 8px; width: 100%;">
-            <span style="font-size: 1.2em;">🛡️</span> Admin
-          </button>
-          <button onclick="selectLoginRole('staff')" class="btn" style="padding: 10px; background: rgba(255,255,255,0.1); border: 1.5px solid white; font-size: 0.95em; font-weight: bold; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; transition: all 0.2s; border-radius: 8px; width: 100%;">
-            <span style="font-size: 1.2em;">👤</span> Staff
-          </button>
-        </div>
-
-        <!-- PIN Entry Stage (Hidden by default) -->
-        <div id="pin-entry-stage" style="display: none; width: 100%; flex-direction: column; align-items: center;">
-          <input type="hidden" id="selectedRoleInput" value="manager">
-          
-          <div id="staff-name-container" style="display: none; width: 100%; max-width: 300px; margin-bottom: 15px;">
-            <p style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: left; width: 100%;">Select Staff Member:</p>
-            <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Select Staff Name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
+        <!-- Unified PIN Access -->
+        <div id="pin-entry-stage" style="display: flex; width: 100%; flex-direction: column; align-items: center;">
+          <div id="staff-name-container" style="width: 100%; max-width: 300px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: left; width: 100%;">Who are you?</p>
+            <input type="text" id="loginStaffName" list="staffNamesList" placeholder="Select or type your name" style="padding: 12px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em;">
             <datalist id="staffNamesList">
+              <option value="Admin">
               ${(staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('')}
             </datalist>
           </div>
           
           <div id="pin-login-container" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px;">
-            <p id="pin-instruction" style="margin-bottom: 5px; opacity: 0.9; text-align: center; font-weight: bold;"></p>
+            <p id="pin-instruction" style="margin-bottom: 5px; opacity: 0.9; text-align: center; font-weight: bold;">🔑 Enter PIN</p>
             <input type="password" id="loginPIN" placeholder="PIN" maxlength="4" style="padding: 15px; border-radius: 8px; border: none; text-align: center; font-size: 1.5em; letter-spacing: 10px; width: 100%; color: var(--text);">
             <button onclick="loginWithPIN()" class="btn" style="background: #28a745; color: white; padding: 12px; font-weight: bold; width: 100%; margin: 0; border-radius: 8px;">Unlock System</button>
             <div style="display: flex; justify-content: space-between; margin-top: 15px; width: 100%;">
-                <a href="#" onclick="resetLoginStage()" style="color: white; font-size: 0.85em; text-decoration: underline; opacity: 0.8;">← Change Role</a>
                 <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.85em; text-decoration: underline; opacity: 0.8;">Forgot PIN?</a>
             </div>
           </div>
@@ -4145,61 +4133,74 @@ async function uploadImage(base64Data, path) {
     }
   }
 
-  function selectLoginRole(role) {
-    const roleContainer = document.getElementById('role-selection-container');
-    const pinStage = document.getElementById('pin-entry-stage');
-    const staffContainer = document.getElementById('staff-name-container');
-    const roleInput = document.getElementById('selectedRoleInput');
-    const pinInstruction = document.getElementById('pin-instruction');
-
-    if (roleContainer) roleContainer.style.display = 'none';
-    if (pinStage) pinStage.style.display = 'flex';
-    if (roleInput) roleInput.value = role;
-
-    if (role === 'staff') {
-      if (staffContainer) staffContainer.style.display = 'block';
-      if (pinInstruction) pinInstruction.textContent = "👤 Enter Staff PIN";
-    } else {
-      if (staffContainer) staffContainer.style.display = 'none';
-      if (pinInstruction) pinInstruction.textContent = "🛡️ Enter Admin PIN";
-    }
-    
-    const pinInput = document.getElementById('loginPIN');
-    if (pinInput) pinInput.focus();
-  }
-
-  function resetLoginStage() {
-    const roleContainer = document.getElementById('role-selection-container');
-    const pinStage = document.getElementById('pin-entry-stage');
-    const pinInput = document.getElementById('loginPIN');
-    const staffInput = document.getElementById('loginStaffName');
-
-    if (roleContainer) roleContainer.style.display = 'flex';
-    if (pinStage) pinStage.style.display = 'none';
-    if (pinInput) pinInput.value = '';
-    if (staffInput) staffInput.value = '';
-  }
-
   function loginWithPIN() {
-    const selectedRole = document.getElementById('selectedRoleInput')?.value || 'manager';
-    const enteredPin = document.getElementById('loginPIN').value;
+    const staffNameInput = document.getElementById('loginStaffName');
+    const staffName = staffNameInput ? staffNameInput.value.trim() : '';
+    const enteredPin = document.getElementById('loginPIN')?.value || '';
     
-    if (selectedRole === 'manager') {
-      const managerPin = settings.managerPIN || "1234";
-      if (enteredPin !== managerPin) {
-        alert("Incorrect Admin PIN.");
-        document.getElementById('loginPIN').value = '';
-        return;
-      }
+    if (!staffName) {
+      alert("Please enter or select your name.");
+      return;
+    }
 
+    // 1. Check Master Admin PIN (Owner)
+    const masterAdminPin = settings.managerPIN || "1234";
+    if (staffName.toLowerCase() === 'admin') {
+        if (enteredPin === masterAdminPin) {
+            completePinLogin('manager', [], 'Admin');
+            return;
+        } else {
+            alert("Incorrect PIN for Admin.");
+            return;
+        }
+    }
+
+    // 2. Check Staff Array
+    const staffMember = staff.find(s => s.name.toLowerCase() === staffName.toLowerCase() && s.pin === enteredPin);
+    
+    if (staffMember) {
+        if (staffMember.isActive === false) {
+            alert("This account is currently inactive. Please contact your manager.");
+            return;
+        }
+
+        // Determine Role (grant Manager role based on role field or if it's admin)
+        const definedRole = (staffMember.role || 'staff').toLowerCase();
+        const isManager = definedRole === 'manager' || definedRole === 'admin';
+        
+        completePinLogin(
+            isManager ? 'manager' : 'staff',
+            staffMember.permissions || ['menuTab'],
+            staffMember.name
+        );
+        console.log(`Unlocked as ${isManager ? 'Manager' : 'Staff'}: ${staffMember.name}`);
+    } else {
+        alert("Incorrect Name or PIN. Please try again.");
+        if (document.getElementById('loginPIN')) document.getElementById('loginPIN').value = '';
+    }
+  }
+
+  /**
+   * Helper to set session storage and update UI after successful PIN verification
+   */
+  function completePinLogin(role, permissions, staffName) {
       isPinVerified = true;
       sessionStorage.setItem('isPinVerified', 'true');
-      currentUserRole = 'manager';
-      sessionStorage.setItem('currentUserRole', 'manager');
-      currentUserPermissions = []; // Managers bypass checks
-      sessionStorage.removeItem('currentUserPermissions');
-      currentLoggedInStaffName = 'Manager';
-      sessionStorage.setItem('currentLoggedInStaffName', 'Manager');
+      
+      currentUserRole = role;
+      sessionStorage.setItem('currentUserRole', role);
+      
+      if (role === 'manager') {
+          currentUserPermissions = []; // Managers bypass individual checks
+          sessionStorage.removeItem('currentUserPermissions');
+      } else {
+          currentUserPermissions = permissions;
+          sessionStorage.setItem('currentUserPermissions', JSON.stringify(permissions));
+      }
+
+      currentLoggedInStaffName = staffName;
+      sessionStorage.setItem('currentLoggedInStaffName', staffName);
+
       const overlay = document.getElementById('login-overlay');
       if (overlay) overlay.style.display = 'none';
       
@@ -4207,50 +4208,23 @@ async function uploadImage(base64Data, path) {
       if (lockBtn) lockBtn.style.display = 'inline-block';
       
       applyRolePermissions();
-      console.log("Unlocked as Manager");
-    } else { // Staff login
-      const staffName = document.getElementById('loginStaffName').value.trim();
-      if (!staffName) {
-        alert("Please enter or select a staff member name.");
-        return;
-      }
+  }
 
-      const staffMember = staff.find(s => s.name === staffName && s.pin === enteredPin);
-      if (staffMember) {
-        if (staffMember.isActive === false) {
-          alert("This account is currently inactive. Please contact your manager.");
-          document.getElementById('loginPIN').value = '';
-          return;
-        }
-        isPinVerified = true;
-        sessionStorage.setItem('isPinVerified', 'true');
-        currentUserRole = 'staff';
-        sessionStorage.setItem('currentUserRole', 'staff');
-        currentUserPermissions = staffMember.permissions || ['menuTab'];
-        sessionStorage.setItem('currentUserPermissions', JSON.stringify(currentUserPermissions));
-        currentLoggedInStaffName = staffMember.name;
-        sessionStorage.setItem('currentLoggedInStaffName', staffMember.name);
-        const overlay = document.getElementById('login-overlay');
-        if (overlay) overlay.style.display = 'none';
-
-        const lockBtn = document.getElementById('nav-lock-btn');
-        if (lockBtn) lockBtn.style.display = 'inline-block';
-        
-        applyRolePermissions();
-        console.log(`Unlocked as Staff: ${staffMember.name}`);
-      } else {
-        alert("Incorrect PIN. Please try again.");
-        document.getElementById('loginPIN').value = '';
-      }
-    }
+  // Placeholder functions for backward compatibility or future use
+  function selectLoginRole(role) { console.log('selectLoginRole is deprecated'); }
+  function resetLoginStage() { 
+    const nameInput = document.getElementById('loginStaffName');
+    const pinInput = document.getElementById('loginPIN');
+    if (nameInput) nameInput.value = '';
+    if (pinInput) pinInput.value = '';
   }
 
   async function forgotPIN() {
     if (!currentUser) return alert("Please sign in with Google first.");
     
-    const selectedRole = document.getElementById('selectedRoleInput')?.value || 'manager';
+    const staffName = document.getElementById('loginStaffName')?.value.trim();
 
-    if (selectedRole === 'staff') {
+    if (staffName && staffName.toLowerCase() !== 'admin' && staffName.toLowerCase() !== 'manager') {
       return alert("Staff members should contact the Manager to reset their PIN.");
     }
 
