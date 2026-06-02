@@ -223,6 +223,21 @@
     transform: translateY(2px); /* "Pressed" effect */
     border-bottom-width: 1px;
   }
+
+  /* Monitoring Mode Sidebar Highlighting */
+  nav.monitoring-active {
+    border-right: 4px solid #17a2b8;
+    background: linear-gradient(to bottom, var(--card), #f0fbfc);
+  }
+  body.dark-mode nav.monitoring-active {
+    background: linear-gradient(to bottom, var(--card), #1a2a2c);
+  }
+  nav.monitoring-active button.active {
+    color: #17a2b8;
+    border-left-color: #17a2b8;
+  }
+  nav.monitoring-active button:hover { color: #17a2b8; }
+
   main {
     padding: 10px 15px; /* Add horizontal padding */
     flex-grow: 1;
@@ -1428,3 +1443,67 @@
   transform: scale(1.05);
   background: rgba(255, 255, 255, 0.2) !important;
 }
+
+/* Shop Directory Grid and Cards */
+.shop-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.shop-card {
+  background: var(--card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.shop-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+}
+
+.shop-card-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  margin: 0 auto 15px auto;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  padding: 5px;
+}
+
+.shop-card-title {
+  font-weight: bold;
+  font-size: 1.15em;
+  margin-bottom: 8px;
+  text-align: center;
+  color: var(--primary);
+}
+
+.shop-card-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 8px;
+}
+
+.shop-card-status {
+  font-size: 0.7em;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.shop-card-status.active { background: #28a745; color: white; }
+.shop-card-status.suspended { background: #ffc107; color: #000; }
+.shop-card-status.deactivated { background: #dc3545; color: white; }

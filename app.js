@@ -334,6 +334,9 @@ async function uploadImage(base64Data, path) {
       // We query the top-level users collection to find all shops
       // Note: This requires the Admin UID to have 'list' permissions in Security Rules
       const usersSnap = await getDocs(collection(dbFirestore, "users"));
+      
+      // Use a Set to track processed UIDs and prevent UI duplication
+      const seenUids = new Set();
       container.innerHTML = '';
       
       if (usersSnap.empty) {
@@ -343,31 +346,50 @@ async function uploadImage(base64Data, path) {
 
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
+        if (seenUids.has(uid)) continue;
+        seenUids.add(uid);
+
         const userData = userDoc.data();
+        const lastActive = userData.lastLogin ? new Date(userData.lastLogin).toLocaleString() : 'Never';
+
         // Fetch the specific shop data for this user
         const dataDoc = await getDoc(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"));
         const shopData = dataDoc.exists() ? dataDoc.data() : {};
         const shopSettings = shopData.settings || {};
         
         const displayEmail = shopSettings.contact || userData.email || 'N/A';
+        const logoUrl = sanitizeLogoUrl(shopSettings.logo) || 'assets/icons/icon.png';
+
+        // Determine shop status from its own admin settings
+        const shopStatus = (shopData.appAdminSettings && shopData.appAdminSettings.shopStatus) || 'active';
+        const statusLabel = shopStatus === 'active' ? 'Registered' : shopStatus.charAt(0).toUpperCase() + shopStatus.slice(1);
+        const statusClass = shopStatus === 'active' ? 'active' : 'suspended';
+
         const card = document.createElement('div');
         card.className = 'shop-card';
         card.onclick = (e) => { if(!e.target.closest('button')) monitorShop(uid, shopSettings.name || 'Unnamed Shop'); };
         
         card.innerHTML = `
+          <img src="${logoUrl}" class="shop-card-logo" onerror="this.src='assets/icons/icon.png';">
           <div class="shop-card-title">${shopSettings.name || 'New Shop'}</div>
           <div class="shop-card-meta">
-            <span class="shop-card-status active">Registered</span>
+            <span class="shop-card-status ${statusClass}">${statusLabel}</span>
             <span class="u-fs-08">${uid.substring(0, 8)}...</span>
           </div>
           <div class="shop-card-details">
             <p class="u-fs-08"><strong>Owner:</strong> ${uid}</p>
             <p class="u-fs-08"><strong>Contact:</strong> ${displayEmail}</p>
-            <p class="u-fs-08"><strong>Last Update:</strong> ${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</p>
+            <p class="u-fs-08"><strong>Last Active:</strong> ${lastActive}</p>
+            <p class="u-fs-08"><strong>Last Sync:</strong> ${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</p>
           </div>
-          <div style="display:flex; gap:8px; margin-top:10px;">
+          <div style="display:flex; gap:5px; margin-top:auto; padding-top:10px; border-top: 1px solid var(--border-color);">
             <button class="btn btn-info u-flex-1" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')" style="margin:0;">Monitor</button>
             <button class="btn btn-danger" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')" style="margin:0;">Delete</button>
+          </div>
+          <div style="display:flex; gap:5px; margin-top:5px;">
+            <button class="btn btn-success u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'active')" style="margin:0; padding:4px;">Activate</button>
+            <button class="btn btn-warning u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'suspended')" style="margin:0; padding:4px;">Suspend</button>
+            <button class="btn btn-danger u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'deactivated')" style="margin:0; padding:4px;">Deactivate</button>
           </div>
         `;
         container.appendChild(card);
@@ -409,6 +431,25 @@ async function uploadImage(base64Data, path) {
     const dashboardBtn = document.querySelector('nav button:first-child');
     if (dashboardBtn) {
       showTab('dashboardTab', dashboardBtn);
+    }
+  }
+
+  /**
+   * Remotely updates the status of a specific shop
+   */
+  async function updateTargetShopStatus(uid, status) {
+    if (!confirm(`Are you sure you want to set this shop status to ${status.toUpperCase()}?`)) return;
+    
+    try {
+      // Update the SHOP_DATA configuration for the target user
+      const shopRef = doc(dbFirestore, "users", uid, "data", "SHOP_DATA");
+      await setDoc(shopRef, { 
+        appAdminSettings: { shopStatus: status } 
+      }, { merge: true });
+      
+      refreshAppAdminShops(); // Refresh UI to show updated badge
+    } catch (error) {
+      handleFirebaseError(error, "Update Shop Status", `users/${uid}/data/SHOP_DATA`);
     }
   }
 
@@ -5404,5 +5445,5 @@ Object.assign(window, {
   showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
   ,
-  refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop
+  refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus
 });
