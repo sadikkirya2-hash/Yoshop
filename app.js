@@ -20,19 +20,20 @@ const firebaseConfig = {
   measurementId: "G-5PETKNBCNF"
 };
 
+// REPLACEMENT: Put your actual Firebase UID here (find it in Firebase Console > Auth)
+const MASTER_APP_ADMIN_UID = "Y0N3Ny1AX9VZEQb6AdRwhK8xpkg2"; // Also detects sadikkirya@gmail.com automatically
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
-
-// Initialize Firestore - use default database
-// Avoid specifying databaseId explicitly as it can cause compatibility issues
 let dbFirestore;
-try { // Explicitly connect to the 'yoshop' database
-  dbFirestore = getFirestore(app, 'yoshop');
-  console.log("Firestore initialized successfully");
+try { 
+  // Connecting to the named database "yoshop" which contains your data and rules
+  dbFirestore = getFirestore(app, "yoshop");
+  console.log("Firestore (yoshop) initialized successfully");
 } catch (error) {
-  console.warn("Firestore initialization warning (will retry on demand):", error.message);
   // Firestore will be re-initialized on demand if needed
+  console.error("Firestore init error:", error);
 }
 
 console.log("Firebase initialized for project:", firebaseConfig.projectId);
@@ -45,10 +46,11 @@ let currentUserPermissions = JSON.parse(sessionStorage.getItem('currentUserPermi
 let isPinVerified = sessionStorage.getItem('isPinVerified') === 'true' && !!currentUserRole;
 let currentLoggedInStaffName = sessionStorage.getItem('currentLoggedInStaffName') || '';
 let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud data on startup
+let isMonitoringMode = false; // Tracks if App Admin has activated monitoring context
 
 const defaultAppAdminSettings = {
-  username: "App Admin",
-  pin: "1997",
+  username: "sadikkirya@gmail.com",
+  pin: "Admin@1997",
   shopStatus: "active"
 };
 let appAdminSettings = { ...defaultAppAdminSettings };
@@ -183,16 +185,244 @@ async function uploadImage(base64Data, path) {
   }
 
   /**
+   * Ensures the App Admin tab has the required dashboard layout elements
+   * This creates the UI dynamically if not present in the HTML template.
+   */
+  function initAppAdminDashboardLayout() {
+    const adminTab = document.getElementById('appAdminTab');
+    if (!adminTab) return;
+    
+    // If layout already exists, don't recreate
+    if (document.getElementById('appAdminShopCardsContainer')) return;
+    
+    adminTab.innerHTML = `
+      <div class="shop-selected-banner" id="selectedShopBanner" style="display:none; margin-bottom:20px; border-left: 5px solid #17a2b8;"></div>
+
+      <h3 class="u-mb-20">👑 App Administrator Control Panel</h3>
+      
+      <!-- Global Analytics Summary -->
+      <div class="dashboard-grid u-mb-20">
+        <div class="dashboard-card">
+          <h4>Total Global Revenue</h4>
+          <p id="globalTotalRevenue"><span class="spinner"></span></p>
+        </div>
+        <div class="dashboard-card">
+          <h4>Total Shops</h4>
+          <p id="globalTotalShops">0</p>
+        </div>
+        <div class="dashboard-card">
+          <h4>Total Transactions</h4>
+          <p id="globalTotalTransactions">0</p>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;" class="u-mb-20">
+        <!-- Admin Credentials Section -->
+        <div class="form-panel">
+          <h4 class="u-m-0">Admin Access Configuration</h4>
+          <p class="u-fs-08 u-text-muted u-mb-15">Update your master login credentials.</p>
+          <div class="input-row">
+            <input type="text" id="appAdminNameInput" placeholder="Admin Username">
+            <input type="password" id="appAdminPinInput" placeholder="Admin Password/PIN">
+          </div>
+          <button class="btn btn-success u-w-full u-m-0" onclick="updateAppAdminCredentials()">Update Credentials</button>
+        </div>
+
+        <!-- Global System Status -->
+        <div class="form-panel">
+          <h4 class="u-m-0">Global Shop Status</h4>
+          <p class="u-fs-08 u-text-muted u-mb-15">Control access for all users.</p>
+          <div class="u-text-center u-mb-15">
+            Status: <strong id="currentShopStatusDisplay" style="color: var(--primary);">Active</strong>
+          </div>
+          <div style="display: flex; gap: 5px;">
+            <button class="btn btn-success u-flex-1 u-m-0" onclick="updateShopStatus('active')">Activate</button>
+            <button class="btn btn-warning u-flex-1 u-m-0" onclick="updateShopStatus('suspended')">Suspend</button>
+            <button class="btn btn-danger u-flex-1 u-m-0" onclick="updateShopStatus('deactivated')">Deactivate</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+        <h4 class="u-m-0">Registered Shops Directory</h4>
+        <button class="btn btn-info u-m-0" onclick="refreshAppAdminShops()">↻ Refresh Shops</button>
+      </div>
+      
+      <div id="appAdminShopCardsContainer" class="shop-cards-grid">
+        <p class="u-text-center u-w-full">Shops list is loading...</p>
+      </div>
+    `;
+  }
+
+  /**
+   * Aggregates sales and data across all registered shops
+   */
+  async function fetchGlobalAnalytics() {
+    if (currentUserRole !== 'appAdmin') return;
+    
+    const displayRevenue = document.getElementById('globalTotalRevenue');
+    const displayShops = document.getElementById('globalTotalShops');
+    const displayTx = document.getElementById('globalTotalTransactions');
+    
+    if (displayRevenue) displayRevenue.textContent = 'Calculating...';
+    
+    try {
+      const usersSnap = await getDocs(collection(dbFirestore, "users"));
+      let totalRevenue = 0;
+      let totalTxCount = 0;
+      
+      if (displayShops) displayShops.textContent = usersSnap.size;
+
+      // We iterate through all users to calculate totals
+      // Note: For very large numbers of shops, this should be moved to a Cloud Function
+      for (const userDoc of usersSnap.docs) {
+        const txSnap = await getDocs(collection(dbFirestore, "users", userDoc.id, "transactions"));
+        txSnap.forEach(doc => {
+          totalRevenue += (doc.data().total || 0);
+          totalTxCount++;
+        });
+      }
+
+      if (displayRevenue) displayRevenue.textContent = formatCurrency(totalRevenue);
+      if (displayTx) displayTx.textContent = totalTxCount;
+    } catch (error) {
+      handleFirebaseError(error, "Global Analytics", "users (collection level)");
+    }
+  }
+
+  /**
+   * Permanently removes a shop and all its associated data
+   */
+  async function deleteShop(shopUid, shopName) {
+    if (currentUserRole !== 'appAdmin') return;
+    
+    const confirmation = confirm(`CRITICAL: Are you sure you want to PERMANENTLY delete "${shopName}"?\n\nThis will wipe all inventory, transactions, and settings. This cannot be undone.`);
+    if (!confirmation) return;
+
+    const pin = prompt("Enter your Admin PIN to confirm deletion:");
+    if (pin !== appAdminSettings.pin) return alert("Incorrect PIN.");
+
+    try {
+      // 1. Delete transactions sub-collection items first
+      const txSnap = await getDocs(collection(dbFirestore, "users", shopUid, "transactions"));
+      const txDeletes = txSnap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(txDeletes);
+
+      // 2. Delete main data and root doc
+      await deleteDoc(doc(dbFirestore, "users", shopUid, "data", "SHOP_DATA"));
+      await deleteDoc(doc(dbFirestore, "users", shopUid));
+
+      alert("Shop deleted successfully.");
+      refreshAppAdminShops();
+    } catch (error) {
+      handleFirebaseError(error, "Delete Shop", `users/${shopUid}`);
+    }
+  }
+
+  /**
+   * Fetches all registered shops for the App Admin dashboard
+   */
+  async function refreshAppAdminShops() {
+    if (currentUserRole !== 'appAdmin') return;
+    
+    const container = document.getElementById('appAdminShopCardsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="u-text-center u-w-full"><span class="spinner"></span> Loading shops...</div>';
+    
+    try {
+      // We query the top-level users collection to find all shops
+      // Note: This requires the Admin UID to have 'list' permissions in Security Rules
+      const usersSnap = await getDocs(collection(dbFirestore, "users"));
+      container.innerHTML = '';
+      
+      if (usersSnap.empty) {
+        container.innerHTML = '<p class="u-text-center u-w-full">No registered shops found.</p>';
+        return;
+      }
+
+      for (const userDoc of usersSnap.docs) {
+        const uid = userDoc.id;
+        const userData = userDoc.data();
+        // Fetch the specific shop data for this user
+        const dataDoc = await getDoc(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"));
+        const shopData = dataDoc.exists() ? dataDoc.data() : {};
+        const shopSettings = shopData.settings || {};
+        
+        const displayEmail = shopSettings.contact || userData.email || 'N/A';
+        const card = document.createElement('div');
+        card.className = 'shop-card';
+        card.onclick = (e) => { if(!e.target.closest('button')) monitorShop(uid, shopSettings.name || 'Unnamed Shop'); };
+        
+        card.innerHTML = `
+          <div class="shop-card-title">${shopSettings.name || 'New Shop'}</div>
+          <div class="shop-card-meta">
+            <span class="shop-card-status active">Registered</span>
+            <span class="u-fs-08">${uid.substring(0, 8)}...</span>
+          </div>
+          <div class="shop-card-details">
+            <p class="u-fs-08"><strong>Owner:</strong> ${uid}</p>
+            <p class="u-fs-08"><strong>Contact:</strong> ${displayEmail}</p>
+            <p class="u-fs-08"><strong>Last Update:</strong> ${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</p>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="btn btn-info u-flex-1" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')" style="margin:0;">Monitor</button>
+            <button class="btn btn-danger" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')" style="margin:0;">Delete</button>
+          </div>
+        `;
+        container.appendChild(card);
+      }
+    } catch (error) {
+      handleFirebaseError(error, "Load All Shops", "users (collection level)");
+      container.innerHTML = '<p class="u-text-center u-w-full">Error loading shops. check console.</p>';
+    }
+  }
+
+  /**
+   * Switches the app context to monitor a specific shop
+   */
+  function monitorShop(shopUid, shopName) {
+    if (!confirm(`Switch to monitoring mode for "${shopName}"?`)) return;
+    
+    console.log(`[ADMIN] Entering monitoring mode for UID: ${shopUid}`);
+    
+    isMonitoringMode = true;
+
+    // Stop listening to current sync
+    if (unsubscribeSync) unsubscribeSync();
+    
+    // Setup real-time sync with the TARGET shop's UID instead of admin's UID
+    setupRealTimeSync(shopUid);
+    
+    // Show a persistent banner that we are in monitoring mode
+    const banner = document.getElementById('selectedShopBanner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span><strong>Monitoring:</strong> ${shopName} (${shopUid.substring(0,8)})</span>
+          <button class="btn btn-danger" onclick="location.reload()" style="margin:0; padding:4px 10px;">Exit Monitor</button>
+        </div>
+      `;
+    }
+    
+    const dashboardBtn = document.querySelector('nav button:first-child');
+    if (dashboardBtn) {
+      showTab('dashboardTab', dashboardBtn);
+    }
+  }
+
+  /**
    * Robust wrapper for Firebase errors to provide better debugging info
    */
-  function handleFirebaseError(error, context = "Firebase Operation") {
+  function handleFirebaseError(error, context = "Firebase Operation", path = "unknown") {
     const errorCode = error.code || 'unknown';
     const errorMessage = error.message || 'An unexpected error occurred';
     
-    console.error(`[${context}] ❌ Error (${errorCode}):`, errorMessage);
+    console.error(`[${context}] ❌ Error (${errorCode}) on path [${path}]:`, errorMessage);
     
     if (errorCode === 'permission-denied') {
-      console.warn(`[${context}] 🔐 Security Rules violation. Check if the user is authenticated and rules allow access to the path.`);
+      console.warn(`[${context}] 🔐 Security Rules violation. Path: ${path}. Check if the user is authenticated and rules allow access to the path.`);
     } else if (errorCode === 'not-found') {
       console.warn(`[${context}] 🔍 The requested document or database instance was not found.`);
     } else if (errorCode === 'unavailable') {
@@ -281,7 +511,7 @@ async function uploadImage(base64Data, path) {
             console.log('[SYNC] ✅ Cloud data synced successfully');
           } catch (firestoreError) {
             syncFailureCount++;
-            handleFirebaseError(firestoreError, "Firestore Sync");
+            handleFirebaseError(firestoreError, "Firestore Sync", `users/${currentUser.uid}/data/SHOP_DATA`);
           } finally {
             isDebouncing = false;
           }
@@ -323,7 +553,7 @@ async function uploadImage(base64Data, path) {
         await saveState('transactions', transactions);
         console.log('[SYNC] Transaction saved to cloud collection');
       } catch (e) {
-        handleFirebaseError(e, "Cloud Transaction Record");
+        handleFirebaseError(e, "Cloud Transaction Record", `users/${currentUser.uid}/transactions`);
       }
     }
   }
@@ -738,6 +968,9 @@ async function uploadImage(base64Data, path) {
     btn.classList.add('active');
     toggleNav(false); // Close nav after selection
 
+    // Dynamically update navigation visibility based on role and active tab
+    applyRolePermissions();
+
     // Special rendering logic for tabs
     switch (tabId) {
       case 'dashboardTab':
@@ -778,10 +1011,13 @@ async function uploadImage(base64Data, path) {
         renderReport();
         break;
       case 'appAdminTab':
+        initAppAdminDashboardLayout();
         document.getElementById('appAdminNameInput').value = appAdminSettings.username;
         document.getElementById('appAdminPinInput').value = appAdminSettings.pin;
         const statusDisplay = document.getElementById('currentShopStatusDisplay');
         if (statusDisplay) statusDisplay.textContent = appAdminSettings.shopStatus.charAt(0).toUpperCase() + appAdminSettings.shopStatus.slice(1);
+        refreshAppAdminShops();
+        fetchGlobalAnalytics();
         break;
     }
   }
@@ -3769,7 +4005,7 @@ async function uploadImage(base64Data, path) {
           }
         },
         (error) => {
-          handleFirebaseError(error, "Real-Time Sync Listener");
+          handleFirebaseError(error, "Real-Time Sync Listener", `users/${uid}/data/SHOP_DATA`);
           console.log('Falling back to local-only mode. You can still use the app offline.');
           isInitialLoadComplete = true; // Don't block local work if cloud fails
         }
@@ -3905,10 +4141,36 @@ async function uploadImage(base64Data, path) {
       // Background Cloud Sync
       onAuthStateChanged(auth, async (user) => {
         currentUser = user;
+        if (user) console.log("Your Firebase UID is:", user.uid);
         updateAuthUI(user);
+        
+        // Detect if the logged in person is the Super Admin
+        if (user && (user.uid === MASTER_APP_ADMIN_UID || user.email === 'sadikkirya@gmail.com')) {
+          console.log("👑 Super Admin detected (" + user.email + "). Granting master access.");
+          currentUserRole = 'appAdmin';
+          isPinVerified = true;
+          sessionStorage.setItem('currentUserRole', 'appAdmin');
+          sessionStorage.setItem('isPinVerified', 'true');
+          // Small delay to ensure Firestore rules pick up the auth token identity
+          setTimeout(() => {
+            const adminTabBtn = document.getElementById('nav-app-admin-btn');
+            if (adminTabBtn) showTab('appAdminTab', adminTabBtn);
+          }, 500);
+        }
+
         if (user) {
           console.log("Logged in, syncing cloud data in background...");
           
+          // Ensure root user document exists so Admin can list it in the directory
+          try {
+            await setDoc(doc(dbFirestore, "users", user.uid), {
+              email: user.email,
+              lastLogin: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) {
+            handleFirebaseError(e, "User Metadata Sync", `users/${user.uid}`);
+          }
+
           // If the user just logged in and it's different from the guest/previous DB,
           // we update the session and reload to ensure clean initialization.
           if (sessionStorage.getItem('currentUserUid') !== user.uid) {
@@ -4129,13 +4391,22 @@ async function uploadImage(base64Data, path) {
     const nav = document.querySelector('nav');
     if (!nav) return;
     
+    const activeTab = document.querySelector('section.active');
+    const isInAdminTab = activeTab && activeTab.id === 'appAdminTab';
+
     nav.querySelectorAll('button').forEach(btn => {
       const onclick = btn.getAttribute('onclick') || '';
-      const tabIdMatch = onclick.match(/showTab\('([^']+)'/);
+      const tabIdMatch = onclick ? onclick.match(/showTab\('([^']+)'/) : null;
       if (tabIdMatch) {
         const tabId = tabIdMatch[1];
         if (isAppAdmin) {
-          btn.style.display = 'flex';
+          // Hide shop navigation while looking at the Admin Management panel 
+          // or if no monitoring session is active.
+          if (isInAdminTab || !isMonitoringMode) {
+            btn.style.display = tabId === 'appAdminTab' ? 'flex' : 'none';
+          } else {
+            btn.style.display = 'flex';
+          }
         } else if (isManager) {
           btn.style.display = tabId === 'appAdminTab' ? 'none' : 'flex';
         } else {
@@ -4152,9 +4423,13 @@ async function uploadImage(base64Data, path) {
     const appAdminBtn = document.getElementById('nav-app-admin-btn');
     if (appAdminBtn) appAdminBtn.style.display = isAppAdmin ? 'flex' : 'none';
     
-    // If staff is accidentally on an unauthorized tab, kick them to their first allowed tab
-    const activeTab = document.querySelector('section.active');
-    if (!isManager && !isAppAdmin && activeTab && !currentUserPermissions.includes(activeTab.id)) {
+    // Tab restriction and redirection logic
+    if (isAppAdmin && !isMonitoringMode && activeTab && activeTab.id !== 'appAdminTab') {
+      // Force App Admin back to management screen if they attempt to view a shop tab without monitoring
+      const adminBtn = document.getElementById('nav-app-admin-btn');
+      if (adminBtn) showTab('appAdminTab', adminBtn);
+    } else if (!isManager && !isAppAdmin && activeTab && !currentUserPermissions.includes(activeTab.id)) {
+      // If staff is accidentally on an unauthorized tab, kick them to their first allowed tab
       const targetTab = currentUserPermissions.includes('menuTab') ? 'menuTab' : currentUserPermissions[0];
       if (targetTab) {
         const targetBtn = nav.querySelector(`button[onclick*="${targetTab}"]`);
@@ -4300,7 +4575,7 @@ async function uploadImage(base64Data, path) {
     const pin = document.getElementById('appAdminPinInput').value.trim();
 
     if (!name) return alert("Username required.");
-    if (pin.length !== 4 || !/^\d+$/.test(pin)) return alert("PIN must be 4 digits.");
+    if (pin.length < 4) return alert("PIN/Password must be at least 4 characters.");
 
     appAdminSettings.username = name;
     appAdminSettings.pin = pin;
@@ -5128,4 +5403,6 @@ Object.assign(window, {
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
+  ,
+  refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop
 });
