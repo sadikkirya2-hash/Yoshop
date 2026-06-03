@@ -193,65 +193,95 @@ async function uploadImage(base64Data, path) {
     if (!adminTab) return;
     
     // If layout already exists, don't recreate
-    if (document.getElementById('appAdminShopCardsContainer')) return;
+    if (document.getElementById('admin-dashboard-view')) return;
     
     adminTab.innerHTML = `
       <div class="shop-selected-banner" id="selectedShopBanner" style="display:none; margin-bottom:20px; border-left: 5px solid #17a2b8;"></div>
-
-      <h3 class="u-mb-20">👑 App Administrator Control Panel</h3>
       
-      <!-- Global Analytics Summary -->
-      <div class="dashboard-grid u-mb-20">
-        <div class="dashboard-card">
-          <h4>Total Global Revenue</h4>
-          <p id="globalTotalRevenue"><span class="spinner"></span></p>
-        </div>
-        <div class="dashboard-card">
-          <h4>Total Shops</h4>
-          <p id="globalTotalShops">0</p>
-        </div>
-        <div class="dashboard-card">
-          <h4>Total Transactions</h4>
-          <p id="globalTotalTransactions">0</p>
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;" class="u-mb-20">
-        <!-- Admin Credentials Section -->
-        <div class="form-panel">
-          <h4 class="u-m-0">Admin Access Configuration</h4>
-          <p class="u-fs-08 u-text-muted u-mb-15">Update your master login credentials.</p>
-          <div class="input-row">
-            <input type="text" id="appAdminNameInput" placeholder="Admin Username">
-            <input type="password" id="appAdminPinInput" placeholder="Admin Password/PIN">
+      <!-- Dashboard View -->
+      <div id="admin-dashboard-view">
+        <h3 class="u-mb-20">📊 App Admin Dashboard</h3>
+        <div class="dashboard-grid u-mb-20">
+          <div class="dashboard-card">
+            <h4>Total Global Revenue</h4>
+            <p id="globalTotalRevenue"><span class="spinner"></span></p>
           </div>
-          <button class="btn btn-success u-w-full u-m-0" onclick="updateAppAdminCredentials()">Update Credentials</button>
-        </div>
-
-        <!-- Global System Status -->
-        <div class="form-panel">
-          <h4 class="u-m-0">Global Shop Status</h4>
-          <p class="u-fs-08 u-text-muted u-mb-15">Control access for all users.</p>
-          <div class="u-text-center u-mb-15">
-            Status: <strong id="currentShopStatusDisplay" style="color: var(--primary);">Active</strong>
+          <div class="dashboard-card">
+            <h4>Total Shops</h4>
+            <p id="globalTotalShops">0</p>
           </div>
-          <div style="display: flex; gap: 5px;">
-            <button class="btn btn-success u-flex-1 u-m-0" onclick="updateShopStatus('active')">Activate</button>
-            <button class="btn btn-warning u-flex-1 u-m-0" onclick="updateShopStatus('suspended')">Suspend</button>
-            <button class="btn btn-danger u-flex-1 u-m-0" onclick="updateShopStatus('deactivated')">Deactivate</button>
+          <div class="dashboard-card">
+            <h4>Total Transactions</h4>
+            <p id="globalTotalTransactions">0</p>
           </div>
         </div>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
-        <h4 class="u-m-0">Registered Shops Directory</h4>
-        <button class="btn btn-info u-m-0" onclick="refreshAppAdminShops()">↻ Refresh Shops</button>
+      <!-- Shops View -->
+      <div id="admin-shops-view" style="display:none;">
+          <h3 class="u-mb-20">🏪 Registered Shops Directory</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+            <h4 class="u-m-0">Registered Shops Directory</h4>
+            <button class="btn btn-info u-m-0" onclick="refreshAppAdminShops()">↻ Refresh Shops</button>
+          </div>
+          
+          <div id="appAdminShopCardsContainer" class="shop-cards-grid">
+            <p class="u-text-center u-w-full">Shops list is loading...</p>
+          </div>
       </div>
-      
-      <div id="appAdminShopCardsContainer" class="shop-cards-grid">
-        <p class="u-text-center u-w-full">Shops list is loading...</p>
+
+      <!-- Settings View -->
+      <div id="admin-settings-view" style="display:none;">
+        <h3 class="u-mb-20">⚙️ App Admin Settings</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;" class="u-mb-20">
+          <!-- Admin Credentials Section -->
+          <div class="form-panel">
+            <h4 class="u-m-0">Admin Access Configuration</h4>
+            <p class="u-fs-08 u-text-muted u-mb-15">Update your master login credentials.</p>
+            <div class="input-row">
+              <input type="text" id="appAdminNameInput" placeholder="Admin Username">
+              <input type="password" id="appAdminPinInput" placeholder="Admin Password/PIN">
+            </div>
+            <button class="btn btn-success u-w-full u-m-0" onclick="updateAppAdminCredentials()">Update Credentials</button>
+          </div>
+
+          <!-- Global System Status -->
+          <div class="form-panel">
+            <h4 class="u-m-0">Global Shop Status</h4>
+            <p class="u-fs-08 u-text-muted u-mb-15">Control access for all users.</p>
+            <div class="u-text-center u-mb-15">
+              Status: <strong id="currentShopStatusDisplay" style="color: var(--primary);">Active</strong>
+            </div>
+            <div style="display: flex; gap: 5px;">
+              <button class="btn btn-success u-flex-1 u-m-0" onclick="updateShopStatus('active')">Activate</button>
+              <button class="btn btn-warning u-flex-1 u-m-0" onclick="updateShopStatus('suspended')">Suspend</button>
+              <button class="btn btn-danger u-flex-1 u-m-0" onclick="updateShopStatus('deactivated')">Deactivate</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
+  }
+
+  /**
+   * Switches between sub-views in the App Admin panel
+   */
+  function switchAppAdminView(view) {
+    // Toggle view visibility
+    document.getElementById('admin-dashboard-view').style.display = view === 'dashboard' ? 'block' : 'none';
+    document.getElementById('admin-shops-view').style.display = view === 'shops' ? 'block' : 'none';
+    document.getElementById('admin-settings-view').style.display = view === 'settings' ? 'block' : 'none';
+
+    // Conditional data fetching based on active sub-view
+    if (view === 'dashboard') fetchGlobalAnalytics();
+    if (view === 'shops') refreshAppAdminShops();
+    if (view === 'settings') {
+      // Ensure inputs are synced when switching to settings view
+      if (document.getElementById('appAdminNameInput')) document.getElementById('appAdminNameInput').value = appAdminSettings.username;
+      if (document.getElementById('appAdminPinInput')) document.getElementById('appAdminPinInput').value = appAdminSettings.pin;
+      const statusDisplay = document.getElementById('currentShopStatusDisplay');
+      if (statusDisplay) statusDisplay.textContent = appAdminSettings.shopStatus.charAt(0).toUpperCase() + appAdminSettings.shopStatus.slice(1);
+    }
   }
 
   /**
@@ -707,6 +737,34 @@ async function uploadImage(base64Data, path) {
       `;
 
       const nav = document.querySelector('nav');
+
+      // Inject App Admin Sidebar Buttons if they don't exist
+      if (nav && !document.getElementById('nav-admin-dash')) {
+        const dashBtn = document.createElement('button');
+        dashBtn.id = 'nav-admin-dash';
+        dashBtn.onclick = () => { showTab('appAdminTab', dashBtn); switchAppAdminView('dashboard'); };
+        dashBtn.innerHTML = `<span>📊</span><span>Admin Dash</span>`;
+        
+        const shopsBtn = document.createElement('button');
+        shopsBtn.id = 'nav-admin-shops';
+        shopsBtn.onclick = () => { showTab('appAdminTab', shopsBtn); switchAppAdminView('shops'); };
+        shopsBtn.innerHTML = `<span>🏪</span><span>Shops</span>`;
+
+        const settingsBtn = document.createElement('button');
+        settingsBtn.id = 'nav-admin-settings';
+        settingsBtn.onclick = () => { showTab('appAdminTab', settingsBtn); switchAppAdminView('settings'); };
+        settingsBtn.innerHTML = `<span>⚙️</span><span>Admin Settings</span>`;
+
+        const logoutBtn = document.getElementById('nav-logout-btn');
+        if (logoutBtn) {
+          nav.insertBefore(dashBtn, logoutBtn);
+          nav.insertBefore(shopsBtn, logoutBtn);
+          nav.insertBefore(settingsBtn, logoutBtn);
+        } else {
+          nav.appendChild(dashBtn); nav.appendChild(shopsBtn); nav.appendChild(settingsBtn);
+        }
+      }
+
       if (nav && !document.getElementById('nav-logout-btn')) {
         const logoutBtn = document.createElement('button');
         logoutBtn.id = 'nav-logout-btn';
@@ -1053,12 +1111,11 @@ async function uploadImage(base64Data, path) {
         break;
       case 'appAdminTab':
         initAppAdminDashboardLayout();
-        document.getElementById('appAdminNameInput').value = appAdminSettings.username;
-        document.getElementById('appAdminPinInput').value = appAdminSettings.pin;
-        const statusDisplay = document.getElementById('currentShopStatusDisplay');
-        if (statusDisplay) statusDisplay.textContent = appAdminSettings.shopStatus.charAt(0).toUpperCase() + appAdminSettings.shopStatus.slice(1);
-        refreshAppAdminShops();
-        fetchGlobalAnalytics();
+        // Default to dashboard if no specific admin button is active
+        const activeBtn = document.querySelector('nav button.active');
+        if (activeBtn && activeBtn.id === 'nav-admin-shops') switchAppAdminView('shops');
+        else if (activeBtn && activeBtn.id === 'nav-admin-settings') switchAppAdminView('settings');
+        else switchAppAdminView('dashboard');
         break;
     }
   }
@@ -4443,8 +4500,9 @@ async function uploadImage(base64Data, path) {
         if (isAppAdmin) {
           // Hide shop navigation while looking at the Admin Management panel 
           // or if no monitoring session is active.
+          const isAdminBtn = tabId === 'appAdminTab' || ['nav-admin-dash', 'nav-admin-shops', 'nav-admin-settings'].includes(btn.id);
           if (isInAdminTab || !isMonitoringMode) {
-            btn.style.display = tabId === 'appAdminTab' ? 'flex' : 'none';
+            btn.style.display = isAdminBtn ? 'flex' : 'none';
           } else {
             btn.style.display = 'flex';
           }
@@ -5445,5 +5503,6 @@ Object.assign(window, {
   showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
   ,
-  refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus
+  refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
+  switchAppAdminView
 });
