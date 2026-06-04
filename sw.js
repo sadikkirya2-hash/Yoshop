@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yobill-v17'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yoshop-v18'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const urlsToCache = [
   '/app.js',
   '/style.css',
   '/assets/icons/icon.png',
+  '/assets/icons/market.png',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js',
@@ -51,12 +52,15 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
         
-        return fetch(event.request).catch(() => {
-          // If fetch fails (offline), and it's a navigation request, return index.html
-          if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-        });
+        return fetch(event.request)
+          .catch((err) => {
+            // If fetch fails (offline or blocked), and it's a navigation request, return index.html
+            if (event.request.mode === 'navigate') {
+              return caches.match('/index.html');
+            }
+            // Re-throw the error to avoid the "Failed to convert value to Response" TypeError.
+            throw err;
+          });
       })
   );
 });
