@@ -536,11 +536,16 @@ async function uploadImage(base64Data, path) {
             <p class="u-fs-08"><strong>Last Sync:</strong> ${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</p>
             ${subStatusHtml}
           </div>
-          <div style="display:flex; gap:5px; margin-top:auto; padding-top:10px; border-top: 1px solid var(--border-color);">
+          <div style="display:flex; gap:5px; margin-top:auto; padding-top:10px; border-top: 1px solid var(--border-color); flex-wrap: wrap;">
             <button class="btn btn-info u-flex-1" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')" style="margin:0;">Monitor</button>
             ${userStatus === 'pending' ? `<button class="btn btn-success u-flex-1" onclick="updateTargetUserStatus('${uid}', 'active')" style="margin:0;">Approve</button>` : ''}
             <button class="btn btn-danger" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')" style="margin:0; flex: 0.5;">Delete</button>
           </div>
+          <div style="display:flex; gap:5px; margin-top:5px; align-items:center;">
+            <input type="date" id="sub-date-${uid}" class="u-fs-08" style="flex:2; padding:3px; border-radius:4px; border:1px solid #ccc; background: white; color: black;">
+            <button class="btn btn-purple u-fs-08 u-flex-1" onclick="updateTargetSubscriptionDate('${uid}')" style="margin:0; padding:4px;">Set Expiry</button>
+          </div>
+
           <div style="display:flex; gap:5px; margin-top:5px;">
             <button class="btn btn-success u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'active')" style="margin:0; padding:4px;">Activate</button>
             <button class="btn btn-warning u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'suspended')" style="margin:0; padding:4px;">Suspend</button>
@@ -548,6 +553,7 @@ async function uploadImage(base64Data, path) {
           <div style="display:flex; gap:5px; margin-top:5px;">
             <button class="btn btn-primary-blue u-fs-08 u-flex-1" onclick="updateTargetSubscription('${uid}', 1)" style="margin:0; padding:4px;">+1 Month</button>
             <button class="btn btn-secondary u-fs-08 u-flex-1" onclick="updateTargetSubscription('${uid}', 12)" style="margin:0; padding:4px;">+1 Year</button>
+            <button class="btn btn-success u-fs-08 u-flex-1" onclick="setFreePlan('${uid}')" style="margin:0; padding:4px;">Free Plan</button>
           </div>
         `;
         shopCards.push(card);
@@ -579,6 +585,14 @@ async function uploadImage(base64Data, path) {
     // Stop listening to current sync
     if (unsubscribeSync) unsubscribeSync();
     
+    // Update local metadata to match the shop we are monitoring
+    getDoc(doc(dbFirestore, "users", shopUid)).then(userSnap => {
+      if (userSnap.exists()) {
+        userMetadata = userSnap.data();
+        updateAuthUI(currentUser);
+      }
+    });
+
     // Setup real-time sync with the TARGET shop's UID instead of admin's UID
     setupRealTimeSync(shopUid);
     
@@ -620,6 +634,41 @@ async function uploadImage(base64Data, path) {
   }
 
   /**
+   * Sets a user to the Free Plan (No expiry)
+   */
+  async function setFreePlan(uid) {
+    if (!confirm("Set this shop to Free Plan? This removes the subscription expiry restriction.")) return;
+    try {
+      await setDoc(doc(dbFirestore, "users", uid), { 
+        status: 'active',
+        subscriptionExpires: null 
+      }, { merge: true });
+      alert("Shop set to Free Plan.");
+      refreshAppAdminShops();
+    } catch (error) {
+      handleFirebaseError(error, "Set Free Plan", `users/${uid}`);
+    }
+  }
+
+  /**
+   * Sets a specific subscription expiry date
+   */
+  async function updateTargetSubscriptionDate(uid) {
+    const dateInput = document.getElementById(`sub-date-${uid}`);
+    const dateVal = dateInput.value;
+    if (!dateVal) return alert("Please select a date first.");
+    
+    try {
+      const expiry = new Date(dateVal).toISOString();
+      await setDoc(doc(dbFirestore, "users", uid), { subscriptionExpires: expiry, status: 'active' }, { merge: true });
+      alert(`Subscription expiry updated.`);
+      refreshAppAdminShops();
+    } catch (error) {
+      handleFirebaseError(error, "Update Subscription Date", `users/${uid}`);
+    }
+  }
+
+  /**
    * Updates the global user status (e.g. approving a pending user)
    */
   async function updateTargetUserStatus(uid, status) {
@@ -650,6 +699,21 @@ async function uploadImage(base64Data, path) {
     } catch (error) {
       handleFirebaseError(error, "Update Subscription", `users/${uid}`);
     }
+  }
+
+  /**
+   * Analyzes user and shop status to return display-ready info
+   */
+  function getSubscriptionInfo() {
+    const userStatus = userMetadata?.status || 'active';
+    const subExpires = userMetadata?.subscriptionExpires ? new Date(userMetadata.subscriptionExpires) : null;
+    const isExpired = subExpires && subExpires < new Date();
+    const shopStatus = appAdminSettings?.shopStatus || 'active';
+    
+    let label = (userStatus === 'pending') ? "PENDING" : ((shopStatus !== 'active') ? shopStatus.toUpperCase() : (isExpired ? "EXPIRED" : (subExpires ? "ACTIVE" : "FREE PLAN")));
+    let color = (userStatus === 'pending' || shopStatus !== 'active' || isExpired) ? "#dc3545" : "#28a745";
+    
+    return { label, color, subExpires, isExpired, userStatus, shopStatus };
   }
 
   /**
@@ -900,8 +964,14 @@ async function uploadImage(base64Data, path) {
     authContainer.id = 'auth-header-container';
     authContainer.style.cssText = 'position: absolute; right: 135px; display: flex; align-items: center; gap: 10px; font-size: 0.85em;';
 
+    const subInfo = getSubscriptionInfo();
+    const statusBadge = `<div style="background: ${subInfo.color}; color: white; padding: 2px 8px; border-radius: 20px; font-size: 0.7em; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">${subInfo.label}</div>`;
+
     if (user) {
       authContainer.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+          ${statusBadge}
+        </div>
         <img src="${user.photoURL || 'https://placehold.co/30'}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid white;">
       `;
 
@@ -947,6 +1017,7 @@ async function uploadImage(base64Data, path) {
         showLoginOverlay();
         const lockBtn = document.getElementById('nav-lock-btn');
         if (lockBtn) lockBtn.style.display = 'none';
+        checkShopStatus();
       }
     } else {
       const navLogoutBtn = document.getElementById('nav-logout-btn');
@@ -4687,12 +4758,22 @@ async function uploadImage(base64Data, path) {
       overlay.style.alignItems = 'center';
       overlay.style.justifyContent = 'center';
 
+      const subInfo = getSubscriptionInfo();
+      const statusDisplay = `
+        <div style="background: rgba(255,255,255,0.1); padding: 8px 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ${subInfo.color}; text-align: left; width: 100%; max-width: 300px;">
+          <span style="font-size: 0.7em; opacity: 0.8; text-transform: uppercase;">Shop Status:</span><br>
+          <strong style="color: ${subInfo.color}; font-size: 0.9em;">${subInfo.label}</strong>
+          ${subInfo.subExpires ? `<div style="font-size: 0.7em; opacity: 0.7;">Valid until: ${subInfo.subExpires.toLocaleDateString()}</div>` : ''}
+        </div>`;
+
       overlay.innerHTML = `
         ${deviceLabel}
         ${logoHtml}
         <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
         <p style="font-size: 1.2em; margin-bottom: 20px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
         
+        ${statusDisplay}
+
         <!-- Unified PIN Access -->
         <div id="pin-entry-stage" style="display: flex; width: 100%; flex-direction: column; align-items: center;">
           <div id="staff-name-container" style="width: 100%; max-width: 300px; margin-bottom: 15px;">
@@ -5780,5 +5861,5 @@ Object.assign(window, {
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
-  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription
+  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan
 });
