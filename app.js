@@ -91,7 +91,8 @@ async function uploadImage(base64Data, path) {
 
   function initDB(userId = 'guest') {
     return new Promise((resolve, reject) => {
-      const dbName = `posDB_${userId}`;
+      const deviceId = new URLSearchParams(window.location.search).get('device') || '';
+      const dbName = `posDB_${userId}${deviceId ? '_' + deviceId : ''}`;
       const request = indexedDB.open(dbName, DB_VERSION);
 
       request.onupgradeneeded = (event) => {
@@ -103,7 +104,7 @@ async function uploadImage(base64Data, path) {
 
       request.onsuccess = (event) => {
         db = event.target.result;
-        console.log(`Local database [${dbName}] initialized successfully.`);
+        console.log(`[DEVICE:${deviceId || 'default'}] Local database [${dbName}] initialized successfully.`);
         resolve(db);
       };
 
@@ -215,6 +216,14 @@ async function uploadImage(base64Data, path) {
             <p id="globalTotalTransactions">0</p>
           </div>
         </div>
+        <div class="charts-container">
+          <div class="chart-wrapper">
+            <canvas id="adminGlobalRevenueChart"></canvas>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="adminShopsComparisonChart"></canvas>
+          </div>
+        </div>
       </div>
 
       <!-- Shops View -->
@@ -303,6 +312,9 @@ async function uploadImage(base64Data, path) {
       let validShopCount = 0;
       const seenEmails = new Set();
 
+      const revenuePerShop = {};
+      const revenuePerDay = {};
+
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
         
@@ -311,6 +323,7 @@ async function uploadImage(base64Data, path) {
         if (!dataDoc.exists()) continue; 
 
         const shopData = dataDoc.data();
+        const shopName = (shopData.settings && shopData.settings.name) || 'Unnamed Shop';
         const menuItems = shopData.menu || [];
         if (uid === MASTER_APP_ADMIN_UID && menuItems.length === 0) continue;
 
@@ -325,15 +338,29 @@ async function uploadImage(base64Data, path) {
         validShopCount++;
 
         const txSnap = await getDocs(collection(dbFirestore, "users", uid, "transactions"));
+        let shopRevenue = 0;
         txSnap.forEach(doc => {
-          totalRevenue += (doc.data().total || 0);
+          const t = doc.data();
+          const amount = (t.total || 0);
+          totalRevenue += amount;
+          shopRevenue += amount;
           totalTxCount++;
+
+          if (t.date) {
+            const date = new Date(t.date).toLocaleDateString();
+            revenuePerDay[date] = (revenuePerDay[date] || 0) + amount;
+          }
         });
+
+        revenuePerShop[shopName] = (revenuePerShop[shopName] || 0) + shopRevenue;
       }
 
       if (displayShops) displayShops.textContent = validShopCount;
       if (displayRevenue) displayRevenue.textContent = formatCurrency(totalRevenue);
       if (displayTx) displayTx.textContent = totalTxCount;
+
+      renderAdminGlobalRevenueChart(revenuePerDay);
+      renderAdminShopsComparisonChart(revenuePerShop);
     } catch (error) {
       handleFirebaseError(error, "Global Analytics", "users (collection level)");
     }
@@ -826,12 +853,7 @@ async function uploadImage(base64Data, path) {
       const nav = document.querySelector('nav');
 
       // Inject App Admin Sidebar Buttons if they don't exist
-      if (nav && !document.getElementById('nav-admin-dash')) {
-        const dashBtn = document.createElement('button');
-        dashBtn.id = 'nav-admin-dash';
-        dashBtn.onclick = () => { showTab('appAdminTab', dashBtn); switchAppAdminView('dashboard'); };
-        dashBtn.innerHTML = `<span>📊</span><span>Admin Dash</span>`;
-        
+      if (nav && !document.getElementById('nav-admin-shops')) {
         const shopsBtn = document.createElement('button');
         shopsBtn.id = 'nav-admin-shops';
         shopsBtn.onclick = () => { showTab('appAdminTab', shopsBtn); switchAppAdminView('shops'); };
@@ -844,11 +866,10 @@ async function uploadImage(base64Data, path) {
 
         const logoutBtn = document.getElementById('nav-logout-btn');
         if (logoutBtn) {
-          nav.insertBefore(dashBtn, logoutBtn);
           nav.insertBefore(shopsBtn, logoutBtn);
           nav.insertBefore(settingsBtn, logoutBtn);
         } else {
-          nav.appendChild(dashBtn); nav.appendChild(shopsBtn); nav.appendChild(settingsBtn);
+          nav.appendChild(shopsBtn); nav.appendChild(settingsBtn);
         }
       }
 
@@ -2880,6 +2901,8 @@ async function uploadImage(base64Data, path) {
   let categoryChartInstance;
   let bestSellingItemsChartInstance;
   let dailySalesChartInstance;
+  let adminGlobalRevenueChartInstance;
+  let adminShopsComparisonChartInstance;
 
   function updateDashboard() {
     // Initialize with defaults even if data is not yet loaded
@@ -3070,6 +3093,66 @@ async function uploadImage(base64Data, path) {
             enabled: data.length > 0
           }
         }
+      }
+    });
+  }
+
+  function renderAdminGlobalRevenueChart(revenuePerDay) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('adminGlobalRevenueChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const labels = Object.keys(revenuePerDay).sort((a, b) => new Date(a) - new Date(b));
+    const data = labels.map(label => revenuePerDay[label]);
+
+    if (adminGlobalRevenueChartInstance) adminGlobalRevenueChartInstance.destroy();
+
+    adminGlobalRevenueChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Global Daily Revenue',
+          data: data,
+          borderColor: '#ff6b35',
+          backgroundColor: 'rgba(255, 107, 53, 0.1)',
+          tension: 0.1,
+          fill: true
+        }]
+      },
+      options: {
+        scales: { y: { beginAtZero: true } },
+        plugins: { 
+          title: { display: true, text: 'Global Daily Revenue' },
+          legend: { display: false }
+        }
+      }
+    });
+  }
+
+  function renderAdminShopsComparisonChart(revenuePerShop) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('adminShopsComparisonChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const sorted = Object.entries(revenuePerShop).sort(([,a],[,b]) => b - a).slice(0, 10);
+    const labels = sorted.map(([name]) => name);
+    const data = sorted.map(([, revenue]) => revenue);
+
+    if (adminShopsComparisonChartInstance) adminShopsComparisonChartInstance.destroy();
+
+    adminShopsComparisonChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{ label: 'Revenue per Shop', data: data, backgroundColor: '#3d5a80' }]
+      },
+      options: {
+        indexAxis: 'y',
+        scales: { x: { beginAtZero: true } },
+        plugins: { title: { display: true, text: 'Top 10 Shops by Revenue' }, legend: { display: false } }
       }
     });
   }
@@ -4404,7 +4487,8 @@ async function uploadImage(base64Data, path) {
       
       // Sync on online status change
       window.addEventListener('online', () => {
-        console.log('[SYNC] 🌐 Back online - syncing all data');
+        const deviceId = new URLSearchParams(window.location.search).get('device') || '';
+        console.log(`[SYNC] 🌐 Device ${deviceId || 'default'} back online - syncing all data`);
         if (currentUser) {
           if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
           syncDebounceTimer = null;
@@ -4416,12 +4500,15 @@ async function uploadImage(base64Data, path) {
       // Listen for updates from other tabs/windows using storage events
       window.addEventListener('storage', (event) => {
         if (event.key && event.key.startsWith('posDB')) {
-          console.log('[SYNC] 📱 Data changed in another tab - refreshing');
-          // Data was changed in another tab, refresh current view
-          setTimeout(() => {
-            refreshCurrentView();
-            updateDashboard();
-          }, 100);
+          const deviceId = new URLSearchParams(window.location.search).get('device') || '';
+          // Only refresh if the change belongs to the same simulated device ID
+          if (!deviceId || event.key.includes(`_${deviceId}`)) {
+            console.log(`[SYNC] 📱 Data changed for device ${deviceId || 'default'} - refreshing`);
+            setTimeout(() => {
+              refreshCurrentView();
+              updateDashboard();
+            }, 100);
+          }
         }
       });
 
@@ -4462,6 +4549,9 @@ async function uploadImage(base64Data, path) {
     if (!currentUser) {
       if (window._marketingInterval) clearInterval(window._marketingInterval);
 
+      const deviceId = new URLSearchParams(window.location.search).get('device');
+      const deviceLabel = deviceId ? `<div style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px; font-size: 0.7em;">Device: ${deviceId}</div>` : '';
+
       // Stage 1: Email Auth / Google Login
       const isRegister = mode === 'register';
       const title = isRegister ? 'Create Account' : 'Account Login Required';
@@ -4476,6 +4566,7 @@ async function uploadImage(base64Data, path) {
       overlay.style.justifyContent = 'center';
 
       overlay.innerHTML = `
+        ${deviceLabel}
         <div class="marketing-side animate-panel-left" style="flex: 1.2; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; padding: 0; border-right: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); overflow: hidden;">
           <img src="assets/icons/market.png" style="width: 100%; height: 100%; object-fit: cover;">
         </div>
@@ -4523,12 +4614,16 @@ async function uploadImage(base64Data, path) {
     } else {
       if (window._marketingInterval) clearInterval(window._marketingInterval);
 
+      const deviceId = new URLSearchParams(window.location.search).get('device');
+      const deviceLabel = deviceId ? `<div style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 4px; font-size: 0.7em;">Simulated Device: ${deviceId}</div>` : '';
+
       // Stage 2: PIN Access
       overlay.style.flexDirection = 'column';
       overlay.style.alignItems = 'center';
       overlay.style.justifyContent = 'center';
 
       overlay.innerHTML = `
+        ${deviceLabel}
         ${logoHtml}
         <h1 style="font-size: 3em; margin-bottom: 10px;">${settings?.name || 'YoShop'}</h1>
         <p style="font-size: 1.2em; margin-bottom: 20px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
@@ -4593,7 +4688,7 @@ async function uploadImage(base64Data, path) {
         if (isAppAdmin) {
           // Hide shop navigation while looking at the Admin Management panel 
           // or if no monitoring session is active.
-          const isAdminBtn = tabId === 'appAdminTab' || ['nav-admin-dash', 'nav-admin-shops', 'nav-admin-settings'].includes(btn.id);
+          const isAdminBtn = tabId === 'appAdminTab' || ['nav-admin-shops', 'nav-admin-settings'].includes(btn.id);
           if (isInAdminTab || !isMonitoringMode) {
             btn.style.display = isAdminBtn ? 'flex' : 'none';
           } else {

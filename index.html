@@ -210,7 +210,7 @@
       <button onclick="showTab('transactionsTab', this)"><span>🧾</span><span>Sales</span></button>
       <button onclick="showTab('reportsTab', this)"><span>📈</span><span>Reports</span></button>
       <button onclick="showTab('settingsTab', this)"><span>⚙️</span><span>Settings</span></button>
-      <button id="nav-app-admin-btn" onclick="showTab('appAdminTab', this)" style="display: none;"><span>🛡️</span><span>App Admin</span></button>
+      <button id="nav-app-admin-btn" onclick="showTab('appAdminTab', this); switchAppAdminView('dashboard');" style="display: none;"><span>🛡️</span><span>App Admin</span></button>
       <button onclick="refreshApp()"><span>🔄</span><span>Refresh</span></button>
       <button id="nav-lock-btn" onclick="lockApp()" title="Logout to PIN Screen" style="display: none;"><span>🔒</span><span>Lock PIN</span></button>
     </nav>
