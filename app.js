@@ -41,6 +41,7 @@ console.log("Firebase initialized for project:", firebaseConfig.projectId);
 const storage = getStorage(app);
 const auth = getAuth(app);
 let currentUser = null;
+let userMetadata = null; // Stores status and subscription info
 let currentUserRole = sessionStorage.getItem('currentUserRole');
 let currentUserPermissions = JSON.parse(sessionStorage.getItem('currentUserPermissions') || '[]');
 let isPinVerified = sessionStorage.getItem('isPinVerified') === 'true' && !!currentUserRole;
@@ -473,6 +474,8 @@ async function uploadImage(base64Data, path) {
 
         const userData = userDoc.data();
         const userEmail = (userData.email || '').toLowerCase().trim();
+        const userStatus = userData.status || 'active';
+        const subExpires = userData.subscriptionExpires || null;
         
         // Robust email detection: sometimes the document ID itself is the email
         const effectiveEmail = (uid.includes('@') && !userEmail) ? uid.toLowerCase().trim() : userEmail;
@@ -498,8 +501,22 @@ async function uploadImage(base64Data, path) {
 
         // Determine shop status from its own admin settings
         const shopStatus = (shopData.appAdminSettings && shopData.appAdminSettings.shopStatus) || 'active';
-        const statusLabel = shopStatus === 'active' ? 'Registered' : shopStatus.charAt(0).toUpperCase() + shopStatus.slice(1);
-        const statusClass = shopStatus === 'active' ? 'active' : 'suspended';
+        
+        // Priority: Global User Status (Pending/Active) then Shop-specific status
+        let statusLabel = userStatus.charAt(0).toUpperCase() + userStatus.slice(1);
+        let statusClass = userStatus === 'active' ? 'active' : (userStatus === 'pending' ? 'suspended' : 'deactivated');
+        
+        if (userStatus === 'active' && shopStatus !== 'active') {
+          statusLabel = shopStatus.charAt(0).toUpperCase() + shopStatus.slice(1);
+          statusClass = 'suspended';
+        }
+
+        let subStatusHtml = '';
+        if (subExpires) {
+          const expiryDate = new Date(subExpires);
+          const isExpired = expiryDate < new Date();
+          subStatusHtml = `<p class="u-fs-08" style="color: ${isExpired ? '#dc3545' : 'inherit'}"><strong>Subscription:</strong> ${expiryDate.toLocaleDateString()} ${isExpired ? '(EXPIRED)' : ''}</p>`;
+        }
 
         const card = document.createElement('div');
         card.className = 'shop-card';
@@ -517,15 +534,20 @@ async function uploadImage(base64Data, path) {
             <p class="u-fs-08"><strong>Contact:</strong> ${contactInfo}</p>
             <p class="u-fs-08"><strong>Last Active:</strong> ${lastActive}</p>
             <p class="u-fs-08"><strong>Last Sync:</strong> ${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</p>
+            ${subStatusHtml}
           </div>
           <div style="display:flex; gap:5px; margin-top:auto; padding-top:10px; border-top: 1px solid var(--border-color);">
             <button class="btn btn-info u-flex-1" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')" style="margin:0;">Monitor</button>
-            <button class="btn btn-danger" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')" style="margin:0;">Delete</button>
+            ${userStatus === 'pending' ? `<button class="btn btn-success u-flex-1" onclick="updateTargetUserStatus('${uid}', 'active')" style="margin:0;">Approve</button>` : ''}
+            <button class="btn btn-danger" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')" style="margin:0; flex: 0.5;">Delete</button>
           </div>
           <div style="display:flex; gap:5px; margin-top:5px;">
             <button class="btn btn-success u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'active')" style="margin:0; padding:4px;">Activate</button>
             <button class="btn btn-warning u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'suspended')" style="margin:0; padding:4px;">Suspend</button>
-            <button class="btn btn-danger u-fs-08 u-flex-1" onclick="updateTargetShopStatus('${uid}', 'deactivated')" style="margin:0; padding:4px;">Deactivate</button>
+          </div>
+          <div style="display:flex; gap:5px; margin-top:5px;">
+            <button class="btn btn-primary-blue u-fs-08 u-flex-1" onclick="updateTargetSubscription('${uid}', 1)" style="margin:0; padding:4px;">+1 Month</button>
+            <button class="btn btn-secondary u-fs-08 u-flex-1" onclick="updateTargetSubscription('${uid}', 12)" style="margin:0; padding:4px;">+1 Year</button>
           </div>
         `;
         shopCards.push(card);
@@ -594,6 +616,39 @@ async function uploadImage(base64Data, path) {
       refreshAppAdminShops(); // Refresh UI to show updated badge
     } catch (error) {
       handleFirebaseError(error, "Update Shop Status", `users/${uid}/data/SHOP_DATA`);
+    }
+  }
+
+  /**
+   * Updates the global user status (e.g. approving a pending user)
+   */
+  async function updateTargetUserStatus(uid, status) {
+    try {
+      await setDoc(doc(dbFirestore, "users", uid), { status }, { merge: true });
+      alert(`User status updated to ${status}.`);
+      refreshAppAdminShops();
+    } catch (error) {
+      handleFirebaseError(error, "Update User Status", `users/${uid}`);
+    }
+  }
+
+  /**
+   * Extends the subscription for a target shop
+   */
+  async function updateTargetSubscription(uid, months) {
+    try {
+      const userRef = doc(dbFirestore, "users", uid);
+      const userSnap = await getDoc(userRef);
+      let currentExpiry = (userSnap.exists() && userSnap.data().subscriptionExpires) ? new Date(userSnap.data().subscriptionExpires) : new Date();
+      
+      if (currentExpiry < new Date()) currentExpiry = new Date();
+      currentExpiry.setMonth(currentExpiry.getMonth() + months);
+      
+      await setDoc(userRef, { subscriptionExpires: currentExpiry.toISOString() }, { merge: true });
+      alert(`Subscription extended by ${months} month(s). New expiry: ${currentExpiry.toLocaleDateString()}`);
+      refreshAppAdminShops();
+    } catch (error) {
+      handleFirebaseError(error, "Update Subscription", `users/${uid}`);
     }
   }
 
@@ -4435,11 +4490,21 @@ async function uploadImage(base64Data, path) {
         if (user) {
           console.log("Logged in, syncing cloud data in background...");
           
-          // Ensure root user document exists so Admin can list it in the directory
+          // Initialize root user document with PENDING status for new users
           try {
+            const userRef = doc(dbFirestore, "users", user.uid);
+            const userSnap = await getDoc(userRef);
+            
+            const data = userSnap.exists() ? userSnap.data() : {};
+            const status = data.status || 'pending';
+
+            // Save metadata locally for permission checks
+            userMetadata = { ...data, status };
+
             await setDoc(doc(dbFirestore, "users", user.uid), {
               email: user.email,
-              lastLogin: new Date().toISOString()
+              lastLogin: new Date().toISOString(),
+              status: status
             }, { merge: true });
           } catch (e) {
             handleFirebaseError(e, "User Metadata Sync", `users/${user.uid}`);
@@ -4837,21 +4902,41 @@ async function uploadImage(base64Data, path) {
 
   function checkShopStatus() {
     const isAppAdmin = currentUserRole === 'appAdmin';
-    const status = appAdminSettings.shopStatus || 'active';
+    const shopStatus = appAdminSettings.shopStatus || 'active';
+    const userStatus = userMetadata?.status || 'active';
+    const subExpires = userMetadata?.subscriptionExpires ? new Date(userMetadata.subscriptionExpires) : null;
+    const isExpired = subExpires && subExpires < new Date();
+
     const overlayId = 'shop-status-overlay';
     let overlay = document.getElementById(overlayId);
 
-    if (status !== 'active' && !isAppAdmin && isPinVerified) {
+    // Priority block: 1. Pending Approval, 2. Subscription Expired, 3. Shop Status
+    const isBlocked = (userStatus === 'pending' || isExpired || shopStatus !== 'active') && !isAppAdmin && isPinVerified;
+
+    if (isBlocked) {
       if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:20000; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; text-align:center; padding:20px;';
         document.body.appendChild(overlay);
       }
-      const label = status.toUpperCase();
+      
+      let title = "SHOP RESTRICTED";
+      let message = "Access to this shop has been restricted by the App Administrator.";
+      
+      if (userStatus === 'pending') {
+        title = "APPROVAL PENDING";
+        message = "Your account is awaiting approval from the system administrator. Please contact support to activate your shop.";
+      } else if (isExpired) {
+        title = "SUBSCRIPTION EXPIRED";
+        message = `Your subscription expired on ${subExpires.toLocaleDateString()}. Please renew your subscription to continue using YoShop.`;
+      } else if (shopStatus !== 'active') {
+        title = `SHOP ${shopStatus.toUpperCase()}`;
+      }
+
       overlay.innerHTML = `
-        <h1 style="color:#ff6b35; font-size:3em; margin-bottom:10px;">⚠️ SHOP ${label}</h1>
-        <p style="font-size:1.2em; max-width:500px;">Access to this shop has been restricted by the App Administrator.</p>
+        <h1 style="color:#ff6b35; font-size:2.5em; margin-bottom:10px;">⚠️ ${title}</h1>
+        <p style="font-size:1.1em; max-width:500px; line-height:1.5;">${message}</p>
         <button onclick="lockApp()" class="btn" style="margin-top:20px; padding:12px 30px;">Return to Login</button>
       `;
       overlay.style.display = 'flex';
@@ -5695,5 +5780,5 @@ Object.assign(window, {
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
-  switchAppAdminView
+  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription
 });
