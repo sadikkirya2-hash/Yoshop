@@ -216,6 +216,10 @@ async function uploadImage(base64Data, path) {
             <h4>Total Transactions</h4>
             <p id="globalTotalTransactions">0</p>
           </div>
+          <div class="dashboard-card" style="border-bottom: 4px solid #ffc107;">
+            <h4>Pending Approval</h4>
+            <p id="globalPendingShops">0</p>
+          </div>
         </div>
         <div class="charts-container">
           <div class="chart-wrapper">
@@ -303,6 +307,7 @@ async function uploadImage(base64Data, path) {
     const displayRevenue = document.getElementById('globalTotalRevenue');
     const displayShops = document.getElementById('globalTotalShops');
     const displayTx = document.getElementById('globalTotalTransactions');
+    const displayPending = document.getElementById('globalPendingShops');
     
     if (displayRevenue) displayRevenue.textContent = 'Calculating...';
     
@@ -311,6 +316,7 @@ async function uploadImage(base64Data, path) {
       let totalRevenue = 0;
       let totalTxCount = 0;
       let validShopCount = 0;
+      let pendingCount = 0;
       const seenEmails = new Set();
 
       const revenuePerShop = {};
@@ -318,6 +324,11 @@ async function uploadImage(base64Data, path) {
 
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
+        const userData = userDoc.data();
+
+        if (userData.status === 'pending') {
+          pendingCount++;
+        }
         
         // 1. Fetch the specific shop data first to verify existence
         const dataDoc = await getDoc(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"));
@@ -329,7 +340,6 @@ async function uploadImage(base64Data, path) {
         if (uid === MASTER_APP_ADMIN_UID && menuItems.length === 0) continue;
 
         // 2. Enforce email deduplication to match Directory logic
-        const userData = userDoc.data();
         const userEmail = (userData.email || '').toLowerCase().trim();
         const effectiveEmail = (uid.includes('@') && !userEmail) ? uid.toLowerCase().trim() : userEmail;
 
@@ -359,6 +369,7 @@ async function uploadImage(base64Data, path) {
       if (displayShops) displayShops.textContent = validShopCount;
       if (displayRevenue) displayRevenue.textContent = formatCurrency(totalRevenue);
       if (displayTx) displayTx.textContent = totalTxCount;
+      if (displayPending) displayPending.textContent = pendingCount;
 
       renderAdminGlobalRevenueChart(revenuePerDay);
       renderAdminShopsComparisonChart(revenuePerShop);
@@ -516,6 +527,8 @@ async function uploadImage(base64Data, path) {
           const expiryDate = new Date(subExpires);
           const isExpired = expiryDate < new Date();
           subStatusHtml = `<p class="u-fs-08" style="color: ${isExpired ? '#dc3545' : 'inherit'}"><strong>Subscription:</strong> ${expiryDate.toLocaleDateString()} ${isExpired ? '(EXPIRED)' : ''}</p>`;
+        } else if (userStatus === 'active') {
+          subStatusHtml = `<p class="u-fs-08" style="color: #28a745"><strong>Plan:</strong> PROMO PLAN</p>`;
         }
 
         const card = document.createElement('div');
@@ -553,7 +566,7 @@ async function uploadImage(base64Data, path) {
           <div style="display:flex; gap:5px; margin-top:5px;">
             <button class="btn btn-primary-blue u-fs-08 u-flex-1" onclick="updateTargetSubscription('${uid}', 1)" style="margin:0; padding:4px;">+1 Month</button>
             <button class="btn btn-secondary u-fs-08 u-flex-1" onclick="updateTargetSubscription('${uid}', 12)" style="margin:0; padding:4px;">+1 Year</button>
-            <button class="btn btn-success u-fs-08 u-flex-1" onclick="setFreePlan('${uid}')" style="margin:0; padding:4px;">Free Plan</button>
+            <button class="btn btn-success u-fs-08 u-flex-1" onclick="setFreePlan('${uid}')" style="margin:0; padding:4px;">Promo Plan</button>
           </div>
         `;
         shopCards.push(card);
@@ -637,13 +650,13 @@ async function uploadImage(base64Data, path) {
    * Sets a user to the Free Plan (No expiry)
    */
   async function setFreePlan(uid) {
-    if (!confirm("Set this shop to Free Plan? This removes the subscription expiry restriction.")) return;
+    if (!confirm("Set this shop to Promo Plan? This removes the subscription expiry restriction.")) return;
     try {
       await setDoc(doc(dbFirestore, "users", uid), { 
         status: 'active',
         subscriptionExpires: null 
       }, { merge: true });
-      alert("Shop set to Free Plan.");
+      alert("Shop set to Promo Plan.");
       refreshAppAdminShops();
     } catch (error) {
       handleFirebaseError(error, "Set Free Plan", `users/${uid}`);
@@ -710,7 +723,7 @@ async function uploadImage(base64Data, path) {
     const isExpired = subExpires && subExpires < new Date();
     const shopStatus = appAdminSettings?.shopStatus || 'active';
     
-    let label = (userStatus === 'pending') ? "PENDING" : ((shopStatus !== 'active') ? shopStatus.toUpperCase() : (isExpired ? "EXPIRED" : (subExpires ? "ACTIVE" : "FREE PLAN")));
+    let label = (userStatus === 'pending') ? "PENDING" : ((shopStatus !== 'active') ? shopStatus.toUpperCase() : (isExpired ? "EXPIRED" : (subExpires ? "ACTIVE" : "PROMO PLAN")));
     let color = (userStatus === 'pending' || shopStatus !== 'active' || isExpired) ? "#dc3545" : "#28a745";
     
     return { label, color, subExpires, isExpired, userStatus, shopStatus };
@@ -4759,11 +4772,14 @@ async function uploadImage(base64Data, path) {
       overlay.style.justifyContent = 'center';
 
       const subInfo = getSubscriptionInfo();
+      const promoMsgHtml = (subInfo.label === "PROMO PLAN") ? `<div style="margin-top: 5px; color: #28a745; font-size: 0.8em; font-weight: bold;">🎉 Enjoy your promo plan!</div>` : '';
+
       const statusDisplay = `
         <div style="background: rgba(255,255,255,0.1); padding: 8px 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ${subInfo.color}; text-align: left; width: 100%; max-width: 300px;">
           <span style="font-size: 0.7em; opacity: 0.8; text-transform: uppercase;">Shop Status:</span><br>
           <strong style="color: ${subInfo.color}; font-size: 0.9em;">${subInfo.label}</strong>
           ${subInfo.subExpires ? `<div style="font-size: 0.7em; opacity: 0.7;">Valid until: ${subInfo.subExpires.toLocaleDateString()}</div>` : ''}
+          ${promoMsgHtml}
         </div>`;
 
       overlay.innerHTML = `
@@ -4799,7 +4815,7 @@ async function uploadImage(base64Data, path) {
           </div>
         </div>
 
-        <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 40px; cursor: pointer; border-radius: 8px;">Logout from Google Account</button>
+        <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 40px; margin-bottom: 60px; cursor: pointer; border-radius: 8px;">Logout from Google Account</button>
         <div style="position: absolute; bottom: 20px; font-size: 0.65em; opacity: 0.7; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
           <div style="display: flex; gap: 20px; font-size: 1.2em; margin-bottom: 2px;">
             <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
