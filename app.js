@@ -2946,6 +2946,7 @@ async function uploadImage(base64Data, path) {
     const reportType = document.getElementById('reportType').value;
     const outputContainer = document.getElementById('reportOutput');
     outputContainer.innerHTML = ''; // Clear previous report
+    outputContainer.style.position = 'relative'; // Ensure relative positioning for watermark overlay
 
     const reportDate = document.getElementById('reportDate').value;
     const staffFilter = document.getElementById('reportStaffFilter').value;
@@ -2977,6 +2978,8 @@ async function uploadImage(base64Data, path) {
       </div>
     `;
 
+    const watermarkHtml = `<div class="report-watermark" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 100px; color: rgba(150, 150, 150, 0.05); font-weight: bold; pointer-events: none; z-index: 0; white-space: nowrap; text-transform: uppercase;">CONFIDENTIAL</div>`;
+
     if (filteredTransactions.length === 0) {
       outputContainer.innerHTML = '<p style="text-align: center; padding: 20px; color: #888;">No data available for the selected filters.</p>';
       return;
@@ -2988,7 +2991,12 @@ async function uploadImage(base64Data, path) {
       const totalBills = filteredTransactions.length;
       
       let totalCost = 0;
+      const staffPerformance = {};
+
       filteredTransactions.forEach(t => {
+        const sName = t.customerName || 'Unknown';
+        staffPerformance[sName] = (staffPerformance[sName] || 0) + (t.total || 0);
+
         (t.items || []).forEach(item => {
           const menuDish = menu.find(d => d.name === item.name);
           const itemCost = menuDish ? calculateDishCost(menuDish) : (parseFloat(item.costPrice) || 0);
@@ -3000,16 +3008,20 @@ async function uploadImage(base64Data, path) {
       const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
       const avgBill = totalBills > 0 ? totalRevenue / totalBills : 0;
 
+      const topStaffEntry = Object.entries(staffPerformance).sort((a, b) => b[1] - a[1])[0];
+      const topStaffInfo = topStaffEntry ? `<p class="u-mt-10 u-bold" style="color: var(--primary); font-size: 0.9em;">🏆 Top Performing Staff: ${topStaffEntry[0]} (${settings.currency || '$'}${formatCurrency(topStaffEntry[1])})</p>` : '';
+
       const paymentMethods = filteredTransactions.reduce((acc, t) => {
         const method = t.paymentMethod || 'Unknown';
         acc[method] = (acc[method] || 0) + (t.total || 0);
         return acc;
       }, {});
 
-      reportHtml = brandingHeader + `
+      reportHtml = brandingHeader + watermarkHtml + `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Financial Performance Summary</h4>
           <p class="u-fs-08 u-text-muted">Data Range: ${reportDate || 'All Time'} | ${totalBills} Transactions</p>
+          ${topStaffInfo}
         </div>
         
         <div class="dashboard-grid u-mb-20">
@@ -3143,7 +3155,7 @@ async function uploadImage(base64Data, path) {
         renderReportProfitChart(marginData);
       };
       
-      reportHtml = brandingHeader + `
+      reportHtml = brandingHeader + watermarkHtml + `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Product Sales vs Inventory</h4>
           <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
@@ -3236,7 +3248,7 @@ async function uploadImage(base64Data, path) {
 
       const totalMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
 
-      reportHtml = brandingHeader + `
+      reportHtml = brandingHeader + watermarkHtml + `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Category Sales & Profitability</h4>
           <p class="u-fs-08 u-text-muted">Performance breakdown per category</p>
