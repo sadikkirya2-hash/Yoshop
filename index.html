@@ -6,7 +6,7 @@
 <title>YoShop</title>
 <link rel="icon" type="image/png" href="assets/icons/icon.png">
 <link rel="canonical" href="https://yobill.netlify.app/">
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest.json" crossorigin="use-credentials">
 <!-- PWA Meta Tags -->
 <meta name="theme-color" content="#ff6b35"/>
 <link rel="apple-touch-icon" href="assets/icons/icon.png">
@@ -148,6 +148,23 @@
         <div class="receipt-actions">
             <button class="btn" onclick="closeMobileConnectModal()" class="cancel-btn">Close</button>
         </div>
+    </div>
+  </div>
+
+  <!-- Report Preview Modal -->
+  <div id="reportPreviewModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content" style="max-width: 95%; width: 1000px; height: 90vh;">
+      <h3 id="reportPreviewTitle">Report Preview</h3>
+      <div id="reportPreviewContent" style="overflow: auto; flex-grow: 1; background: white; padding: 20px; border: 1px solid #ddd; color: black;">
+        <!-- Report content will be cloned here -->
+      </div>
+      <div class="receipt-actions">
+        <button class="btn btn-primary-blue" onclick="downloadReportPDF('p')">Portrait (A4)</button>
+        <button class="btn btn-primary-blue" onclick="downloadReportPDF('l')">Landscape (A4)</button>
+        <button class="btn btn-info" onclick="exportReportAsImage()">Save as Image</button>
+        <button class="btn btn-success" onclick="exportReportToCSV()">Excel/CSV</button>
+        <button class="btn cancel-btn" onclick="document.getElementById('reportPreviewModal').style.display='none'">Close</button>
+      </div>
     </div>
   </div>
 
@@ -541,11 +558,21 @@
           </div>
           <div class="input-row u-flex-nowrap u-flex-grow-1">
             <select id="reportStaffFilter" onchange="renderReport()" class="u-flex-basis-150"><option value="">All Staff</option></select>
+            <div id="reportCategoryFilterContainer" class="u-flex-basis-150" style="position:relative;">
+              <button class="btn u-w-full u-m-0" onclick="toggleReportCategoryDropdown()" style="font-size:0.8em; padding:8px; background:var(--card); color:var(--text); border:1px solid var(--border-color);">Categories</button>
+              <div id="reportCategoryDropdown" style="display:none; position:absolute; top:100%; left:0; width:220px; background:var(--card); border:1px solid var(--border-color); z-index:1000; padding:15px; box-shadow:0 10px 25px rgba(0,0,0,0.2); border-radius:8px; max-height:300px; overflow-y:auto;">
+                <!-- Checkboxes will be injected here -->
+              </div>
+            </div>
             <button class="btn u-flex-grow-1" onclick="renderReport()">Generate</button>
-            <button class="btn btn-primary-blue" style="margin: 5px 2px;" onclick="downloadReportPDF()" title="Download PDF">PDF</button>
-            <button class="btn btn-info" style="margin: 5px 2px;" onclick="exportReportAsImage()" title="Download Image">Image</button>
-            <button class="btn btn-success" style="margin: 5px 2px;" onclick="exportReportToCSV()" title="Export Excel/CSV">Excel</button>
+            <button class="btn btn-purple" style="margin: 5px 2px;" onclick="openReportPreview()" title="Preview Report">Preview</button>
           </div>
+        </div>
+        <div class="input-row u-mb-20" style="justify-content: flex-end; gap: 5px; flex-wrap: wrap;">
+          <button class="btn btn-primary-blue u-fs-08" onclick="downloadReportPDF('p')" title="Portrait A4">PDF (P)</button>
+          <button class="btn btn-primary-blue u-fs-08" onclick="downloadReportPDF('l')" title="Landscape A4">PDF (L)</button>
+          <button class="btn btn-info u-fs-08" onclick="exportReportAsImage()">Image</button>
+          <button class="btn btn-success u-fs-08" onclick="exportReportToCSV()">Excel</button>
         </div>
         <div id="reportOutput" style="overflow-x: auto;"></div>
       </section>

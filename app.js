@@ -991,7 +991,7 @@ async function uploadImage(base64Data, path) {
       const nav = document.querySelector('nav');
 
       // Inject App Admin Sidebar Buttons if they don't exist
-      if (nav && !document.getElementById('nav-admin-shops')) {
+      if (currentUserRole === 'appAdmin' && nav && !document.getElementById('nav-admin-shops')) {
         const shopsBtn = document.createElement('button');
         shopsBtn.id = 'nav-admin-shops';
         shopsBtn.onclick = () => { showTab('appAdminTab', shopsBtn); switchAppAdminView('shops'); };
@@ -2928,7 +2928,7 @@ async function uploadImage(base64Data, path) {
   function populateReportFilters() {
     const staffSelect = document.getElementById('reportStaffFilter');
     if (!staffSelect) return;
-    
+
     // Always reset filters to "All" and default to Item Sales when opening the tab
     const dateInput = document.getElementById('reportDate');
     if (dateInput) dateInput.value = '';
@@ -2940,6 +2940,15 @@ async function uploadImage(base64Data, path) {
       staffSelect.innerHTML += `<option value="${member.name}">${member.name}</option>`;
     });
     staffSelect.value = '';
+
+    const catDropdown = document.getElementById('reportCategoryDropdown');
+    if (catDropdown) {
+      catDropdown.innerHTML = [...dishCategories, 'Uncategorized'].map(cat => `
+        <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer; color:var(--text); font-size:0.9em;">
+          <input type="checkbox" value="${cat}" checked onchange="renderReport()"> ${cat}
+        </label>
+      `).join('');
+    }
   }
 
   function renderReport() {
@@ -2962,6 +2971,24 @@ async function uploadImage(base64Data, path) {
 
       return true;
     });
+
+    const selectedCategories = Array.from(document.querySelectorAll('#reportCategoryDropdown input:checked')).map(cb => cb.value);
+    const hasCategoryFilter = selectedCategories.length > 0 && selectedCategories.length < (dishCategories.length + 1);
+
+    if (hasCategoryFilter) {
+      filteredTransactions = filteredTransactions.map(t => {
+        const filteredItems = (t.items || []).filter(item => {
+          const dish = menu.find(d => d.name === item.name);
+          const cat = dish ? dish.category : 'Uncategorized';
+          return selectedCategories.includes(cat);
+        });
+        
+        if (filteredItems.length === 0) return null;
+        
+        const revenueForCats = filteredItems.reduce((sum, i) => sum + (i.qty * (i.price || 0)), 0);
+        return { ...t, items: filteredItems, total: revenueForCats };
+      }).filter(t => t !== null);
+    }
 
     const logoUrl = sanitizeLogoUrl(settings.logo);
     const brandingHeader = `
@@ -2992,10 +3019,16 @@ async function uploadImage(base64Data, path) {
       
       let totalCost = 0;
       const staffPerformance = {};
+      const monthlyRevenueData = {};
 
       filteredTransactions.forEach(t => {
         const sName = t.customerName || 'Unknown';
         staffPerformance[sName] = (staffPerformance[sName] || 0) + (t.total || 0);
+
+        if (t.date) {
+          const month = t.date.substring(0, 7); // YYYY-MM
+          monthlyRevenueData[month] = (monthlyRevenueData[month] || 0) + (t.total || 0);
+        }
 
         (t.items || []).forEach(item => {
           const menuDish = menu.find(d => d.name === item.name);
@@ -3047,6 +3080,10 @@ async function uploadImage(base64Data, path) {
           <canvas id="staffRevenueChart"></canvas>
         </div>
 
+        <div class="chart-wrapper u-mb-20" style="max-width: 100%; height: 300px;">
+          <canvas id="monthlyRevenueChart"></canvas>
+        </div>
+
         <div class="u-mb-20">
           <h5>Collected by Payment Method</h5>
           <table id="reportTable">
@@ -3073,6 +3110,7 @@ async function uploadImage(base64Data, path) {
 
       postRender = () => {
         renderStaffRevenueChart(staffPerformance);
+        renderMonthlyRevenueChart(monthlyRevenueData);
       };
 
     } else if (reportType === 'itemSales') {
@@ -3289,59 +3327,90 @@ async function uploadImage(base64Data, path) {
     if (postRender) postRender();
   }
 
-  async function downloadReportPDF() {
-    if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
-        alert("PDF/Image generation libraries are not loaded. Please check your internet connection.");
-        return;
-    }
-    const reportOutput = document.getElementById('reportOutput');
+  function openReportPreview() {
+    const reportOutput = document.getElementById("reportOutput");
     if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
-      return alert("Please generate a report first before downloading.");
+      return alert("Please generate a report first.");
     }
-
-    const { jsPDF } = window.jspdf;
-    
-    try {
-        const canvas = await html2canvas(reportOutput, {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg')
-        });
-
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, 297));
-        
-        const reportType = document.getElementById('reportType').value;
-        const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
-        pdf.save(`YoShop_Report_${reportType}_${reportDate}.pdf`);
-
-    } catch (error) {
-        console.error("Error generating PDF:", error);
-        alert("Could not generate PDF. Please try again.");
-    }
+    const previewContent = document.getElementById("reportPreviewContent");
+    previewContent.innerHTML = "";
+    const clone = reportOutput.cloneNode(true);
+    previewContent.appendChild(clone);
+    document.getElementById("reportPreviewModal").style.display = "flex";
   }
 
-  async function exportReportAsImage() {
-    if (typeof html2canvas === 'undefined') {
-        alert("Image generation library is not loaded. Please check your internet connection.");
+  function toggleReportCategoryDropdown() {
+    const dropdown = document.getElementById('reportCategoryDropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+  }
+
+  async function downloadReportPDF(orientation = 'p') {
+    if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
+        alert("PDF libraries are not loaded.");
         return;
     }
     const reportOutput = document.getElementById('reportOutput');
     if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
       return alert("Please generate a report first.");
     }
+    const { jsPDF } = window.jspdf;
+    const reportType = document.getElementById('reportType').value;
+    const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
+
+    // Create a robust capture clone to avoid clipping on mobile screen widths
+    const clone = reportOutput.cloneNode(true);
+    // Force a desktop-like width for capture to ensure all columns fit
+    const captureWidth = orientation === 'p' ? 850 : 1200;
+    clone.style.width = captureWidth + 'px';
+    clone.style.position = 'absolute';
+    clone.style.left = '-9999px';
+    clone.style.top = '0';
+    clone.style.padding = '40px';
+    clone.style.background = 'white';
+    clone.style.color = 'black';
+    document.body.appendChild(clone);
 
     try {
-        const canvas = await html2canvas(reportOutput, {
+        const canvas = await html2canvas(clone, {
             scale: 2,
             useCORS: true,
-            backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg')
+            backgroundColor: '#ffffff'
         });
-        
+        document.body.removeChild(clone);
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF(orientation, 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`YoShop_Report_${reportType}_${reportDate}.pdf`);
+    } catch (error) {
+        console.error("Error generating PDF:", error);
+        if (clone.parentNode) document.body.removeChild(clone);
+        alert("Could not generate PDF. Please try again.");
+    }
+  }
+
+  async function exportReportAsImage() {
+    if (typeof html2canvas === 'undefined') {
+        alert("Image library not loaded.");
+        return;
+    }
+    const reportOutput = document.getElementById('reportOutput');
+    if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
+      return alert("Please generate a report first.");
+    }
+    const clone = reportOutput.cloneNode(true);
+    clone.style.width = '1200px'; 
+    clone.style.position = 'absolute';
+    clone.style.left = '-9999px';
+    clone.style.padding = '40px';
+    clone.style.background = 'white';
+    clone.style.color = 'black';
+    document.body.appendChild(clone);
+    try {
+        const canvas = await html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        document.body.removeChild(clone);
         const link = document.createElement('a');
         const reportType = document.getElementById('reportType').value;
         const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
@@ -3350,6 +3419,7 @@ async function uploadImage(base64Data, path) {
         link.click();
     } catch (error) {
         console.error("Error generating image:", error);
+        if (clone.parentNode) document.body.removeChild(clone);
         alert("Could not generate report image.");
     }
   }
@@ -3397,6 +3467,7 @@ async function uploadImage(base64Data, path) {
   let adminShopsComparisonChartInstance;
   let staffRevenueChartInstance;
   let reportProfitChartInstance;
+  let monthlyRevenueChartInstance;
 
   function updateDashboard() {
     // Initialize with defaults even if data is not yet loaded
@@ -3567,6 +3638,44 @@ async function uploadImage(base64Data, path) {
           legend: { display: false },
           title: { display: true, text: 'Top 10 Product Profit Margins (%)' }
         }
+      }
+    });
+  }
+
+  function renderMonthlyRevenueChart(data) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('monthlyRevenueChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (monthlyRevenueChartInstance) {
+      monthlyRevenueChartInstance.destroy();
+    }
+
+    const labels = Object.keys(data).sort();
+    const values = labels.map(label => data[label]);
+
+    monthlyRevenueChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Revenue',
+          data: values,
+          borderColor: '#ff6b35',
+          backgroundColor: 'rgba(255, 107, 53, 0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Monthly Revenue Trend' }
+        },
+        scales: { y: { beginAtZero: true } }
       }
     });
   }
@@ -5350,6 +5459,13 @@ async function uploadImage(base64Data, path) {
     const isInAdminTab = activeTab && activeTab.id === 'appAdminTab';
 
     nav.querySelectorAll('button').forEach(btn => {
+      // Strictly hide App Admin specific buttons for non-AppAdmins
+      const isAdminSpecific = btn.id === 'nav-app-admin-btn' || btn.id === 'nav-admin-shops' || btn.id === 'nav-admin-settings';
+      if (!isAppAdmin && isAdminSpecific) {
+        btn.style.display = 'none';
+        return;
+      }
+
       const onclick = btn.getAttribute('onclick') || '';
       const tabIdMatch = onclick ? onclick.match(/showTab\('([^']+)'/) : null;
       if (tabIdMatch) {
@@ -6367,7 +6483,7 @@ Object.assign(window, {
   addSplitBill, removeSplitBill, moveItemToFirstBill, moveItemToUnassigned,
   processSplitPayments, addToOrder, decreaseQty, processBill, updatePaymentTotals,
   toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel, getCurrentServerName,
-  deleteItem, previewOrder, downloadCurrentReceiptAsPDF, shareReceipt, convertToProduct,
+  deleteItem, previewOrder, downloadCurrentReceiptAsPDF, shareReceipt, convertToProduct, openReportPreview,
   printReceipt, connectUSBScanner, connectBluetoothScanner,
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
   directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction, handleChangePassword,
@@ -6384,5 +6500,5 @@ Object.assign(window, {
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus, exportReportAsImage
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
-  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode
+  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode, toggleReportCategoryDropdown
 });
