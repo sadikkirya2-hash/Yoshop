@@ -3333,8 +3333,8 @@ async function uploadImage(base64Data, path) {
   }
 
   function openReportPreview() {
-    const original = document.getElementById("reportOutput");
-    if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
+    const original = document.getElementById('reportOutput');
+    if (!original || original.innerHTML.trim() === '' || original.innerText.includes('No data available')) {
       return alert("Please generate a report first.");
     }
     const previewContent = document.getElementById("reportPreviewContent");
@@ -3377,6 +3377,19 @@ async function uploadImage(base64Data, path) {
 
     // Create a robust capture clone to avoid clipping on mobile screen widths
     const clone = reportOutput.cloneNode(true);
+
+    // Canvas contents (Charts) are not copied by cloneNode. We must copy them manually.
+    const originalCanvases = reportOutput.querySelectorAll('canvas');
+    const clonedCanvases = clone.querySelectorAll('canvas');
+    originalCanvases.forEach((origCanvas, index) => {
+        const destCanvas = clonedCanvases[index];
+        if (destCanvas) {
+            destCanvas.width = origCanvas.width;
+            destCanvas.height = origCanvas.height;
+            destCanvas.getContext('2d').drawImage(origCanvas, 0, 0);
+        }
+    });
+
     // Force a desktop-like width for capture to ensure all columns fit
     const captureWidth = orientation === 'p' ? 850 : 1200;
     clone.style.width = captureWidth + 'px';
@@ -3398,9 +3411,26 @@ async function uploadImage(base64Data, path) {
 
         const imgData = canvas.toDataURL('image/jpeg', 0.95);
         const pdf = new jsPDF(orientation, 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        
+        const imgWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        // Add the first page
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        // Loop to add extra pages if the report is longer than one A4 page
+        while (heightLeft > 0) {
+            position -= pageHeight; // Move the image "up" for the next page slice
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+        }
+
         pdf.save(`YoShop_Report_${reportType}_${reportDate}.pdf`);
     } catch (error) {
         console.error("Error generating PDF:", error);
@@ -3419,6 +3449,19 @@ async function uploadImage(base64Data, path) {
       return alert("Please generate a report first.");
     }
     const clone = reportOutput.cloneNode(true);
+
+    // Copy canvas data for charts to show in the exported image
+    const originalCanvases = reportOutput.querySelectorAll('canvas');
+    const clonedCanvases = clone.querySelectorAll('canvas');
+    originalCanvases.forEach((origCanvas, index) => {
+        const destCanvas = clonedCanvases[index];
+        if (destCanvas) {
+            destCanvas.width = origCanvas.width;
+            destCanvas.height = origCanvas.height;
+            destCanvas.getContext('2d').drawImage(origCanvas, 0, 0);
+        }
+    });
+
     clone.style.width = '1200px'; 
     clone.style.position = 'absolute';
     clone.style.left = '-9999px';
