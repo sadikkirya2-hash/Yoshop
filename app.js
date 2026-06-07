@@ -6,7 +6,7 @@ import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebas
 
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, initializeFirestore, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, linkWithCredential, EmailAuthProvider, updatePassword, reauthenticateWithCredential, updateProfile, deleteUser } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+import { getAuth, signInWithPopup, signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, linkWithCredential, EmailAuthProvider, updatePassword, reauthenticateWithCredential, updateProfile, deleteUser } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -1048,7 +1048,9 @@ async function uploadImage(base64Data, path) {
       if (lockBtn) lockBtn.style.display = 'none';
     }
     const header = document.querySelector('header');
-    header.appendChild(authContainer);
+    if (header) {
+      header.appendChild(authContainer);
+    }
   }
 
   function lockApp() {
@@ -1074,8 +1076,8 @@ async function uploadImage(base64Data, path) {
     if (btn) btn.innerHTML = '<span class="spinner"></span> Signing in...';
     
     try {
-      await signInWithPopup(auth, provider);
-      location.reload(); 
+      // Switched to Redirect to fix COOP policy blocks and popup-closed errors
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Login failed:", error);
       alert("Login failed: " + error.message);
@@ -1570,9 +1572,8 @@ async function uploadImage(base64Data, path) {
   }
 
   function generateRandomBarcode() {
-    // Generate a random 12-digit number (like UPC)
-    const code = Math.floor(100000000000 + Math.random() * 900000000000).toString();
-    document.getElementById('dishBarcode').value = code;
+    // Redirect to the smart generation logic instead of random numbers
+    generateAutoBarcode(true);
   }
 
   function editDish(index) {
@@ -4112,6 +4113,9 @@ async function uploadImage(base64Data, path) {
     
     document.getElementById('dishImageBase64').value = item.image || '';
     document.getElementById('dishImagePreview').src = item.image || 'https://placehold.co/100';
+    
+    // Trigger auto-barcode generation for the new product
+    generateAutoBarcode();
     updateRecipeTotals();
   }
 
@@ -4302,8 +4306,8 @@ async function uploadImage(base64Data, path) {
         newTotal: stock,
         note: 'Initial Stock'
       });
-      menu.push(newItem);
-      alert(`Item "${name}" added successfully.`);
+    menu.push(newItem);
+    alert(`Item "${name}" added successfully.`);
     }
 
     saveData();
@@ -4312,6 +4316,55 @@ async function uploadImage(base64Data, path) {
     renderMenu();
     renderDishesTable();
   }
+
+  /**
+   * Automatically generates a formatted barcode/QR code based on Category and Name
+   * Format: [CatPrefix]-[ProdPrefix]-[Seq] (e.g., SO-MI-01)
+   */
+  function generateAutoBarcode(force = false) {
+    const nameInput = document.getElementById('dishName');
+    const catSelect = document.getElementById('dishCategory');
+    const barcodeInput = document.getElementById('dishBarcode');
+    const dishIndexInput = document.getElementById('dishIndex');
+    const dishIndex = dishIndexInput ? dishIndexInput.value : '';
+
+    // Only auto-generate if we are creating new OR the barcode is currently empty OR if forced by button
+    if (!force && dishIndex !== '' && barcodeInput && barcodeInput.value !== '') return;
+
+    const name = nameInput ? nameInput.value.trim() : '';
+    const cat = catSelect ? catSelect.value : '';
+
+    if (force) {
+        if (!name || name.length < 2) {
+            return alert("Please enter a product name first (at least 2 letters).");
+        }
+        if (!cat) {
+            return alert("Please select a category first.");
+        }
+    }
+
+    if (!name || name.length < 2 || !cat || cat.length < 2) return;
+
+    // Extract prefixes based on instructions (first 2 letters)
+    const catPrefix = cat.substring(0, 2).toUpperCase();
+    const prodPrefix = name.substring(0, 2).toUpperCase();
+    const basePrefix = `${catPrefix}-${prodPrefix}-`;
+
+    // Find next number in sequence for this specific prefix across existing products
+    let maxNum = 0;
+    menu.forEach(item => {
+      if (item.barcode && item.barcode.toUpperCase().startsWith(basePrefix)) {
+        const parts = item.barcode.split('-');
+        const numPart = parts[parts.length - 1];
+        const num = parseInt(numPart, 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    });
+
+    const nextNum = (maxNum + 1).toString().padStart(2, '0');
+    if (barcodeInput) barcodeInput.value = basePrefix + nextNum;
+  }
+
   function clearNewStockItemForm() {
     document.getElementById('newStockItemName').value = '';
     document.getElementById('newStockItemUnit').value = '';
@@ -4623,6 +4676,26 @@ async function uploadImage(base64Data, path) {
       populateCategoryFilter();
       setupSettingsAccordion();
       updatePrinterStatus(false);
+
+      // Wire up Product Form Automation (Price auto-fill and Barcode generation)
+      const dishNameEl = document.getElementById('dishName');
+      const dishCatEl = document.getElementById('dishCategory');
+      if (dishNameEl) {
+        dishNameEl.addEventListener('input', () => {
+          // Auto-fill price and category from stock if creating a new entry
+          if (document.getElementById('dishIndex').value === '') {
+            const name = dishNameEl.value.trim();
+            const stockMatch = menu.find(i => i.name.toLowerCase() === name.toLowerCase() && i.stock !== undefined);
+            if (stockMatch) {
+              if (stockMatch.category) dishCatEl.value = stockMatch.category;
+              document.getElementById('dishSellingPrice').value = stockMatch.price || 0;
+              updateRecipeTotals();
+            }
+          }
+          generateAutoBarcode();
+        });
+      }
+      if (dishCatEl) dishCatEl.addEventListener('change', generateAutoBarcode);
 
       // Instant Sync on Visibility Change
       // Save immediately when app goes to background
@@ -5880,5 +5953,5 @@ Object.assign(window, {
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
-  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan
+  switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode
 });
