@@ -40,7 +40,8 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('fetch', (event) => {
   // Bypass service worker for development server scripts to avoid 502/MIME errors
-  if (event.request.url.includes('fiveserver.js') || event.request.url.includes('livereload.js')) {
+  // Also bypass for Firebase Storage to prevent CORS cache conflicts
+  if (event.request.url.includes('fiveserver.js') || event.request.url.includes('livereload.js') || event.request.url.includes('firebasestorage.googleapis.com')) {
     return;
   }
 
@@ -58,8 +59,8 @@ self.addEventListener('fetch', (event) => {
             if (event.request.mode === 'navigate') {
               return caches.match('/index.html');
             }
-            // Re-throw the error to avoid the "Failed to convert value to Response" TypeError.
-            throw err;
+            // Return a standard error response to trigger the element's onerror handler without crashing the service worker
+            return Response.error();
           });
       })
   );

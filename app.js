@@ -2990,10 +2990,15 @@ async function uploadImage(base64Data, path) {
       }).filter(t => t !== null);
     }
 
-    const logoUrl = sanitizeLogoUrl(settings.logo);
+    // Strict cache-buster and CORS handling for the logo
+    let logoUrl = sanitizeLogoUrl(settings.logo);
+    if (logoUrl && logoUrl.startsWith('http')) {
+        logoUrl += (logoUrl.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+    }
+
     const brandingHeader = `
       <div class="report-branding-header" style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
-        <img src="${logoUrl || 'assets/icons/icon.png'}" crossorigin="anonymous" onerror="this.src='assets/icons/icon.png';" style="width: 60px; height: 60px; object-fit: contain; border-radius: 8px; background: white; padding: 2px; border: 1px solid var(--border-color);">
+        <img src="${logoUrl || 'assets/icons/icon.png'}" crossorigin="anonymous" onerror="this.removeAttribute('crossorigin'); this.src='assets/icons/icon.png';" style="width: 60px; height: 60px; object-fit: contain; border-radius: 8px; background: white; padding: 2px; border: 1px solid var(--border-color);" alt="Logo">
         <div style="flex-grow: 1;">
           <h2 style="margin: 0; color: var(--primary);">${settings.name || 'YoShop'}</h2>
           <p style="margin: 2px 0; font-size: 0.85em; opacity: 0.8;">${settings.address || ''}</p>
@@ -3328,13 +3333,26 @@ async function uploadImage(base64Data, path) {
   }
 
   function openReportPreview() {
-    const reportOutput = document.getElementById("reportOutput");
+    const original = document.getElementById("reportOutput");
     if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
       return alert("Please generate a report first.");
     }
     const previewContent = document.getElementById("reportPreviewContent");
     previewContent.innerHTML = "";
-    const clone = reportOutput.cloneNode(true);
+    
+    // Deep clone the report
+    const clone = original.cloneNode(true);
+    
+    // Canvas contents (Charts) are not copied by cloneNode. We must copy them manually.
+    const originalCanvases = original.querySelectorAll('canvas');
+    const clonedCanvases = clone.querySelectorAll('canvas');
+    originalCanvases.forEach((origCanvas, index) => {
+        const destCanvas = clonedCanvases[index];
+        destCanvas.width = origCanvas.width;
+        destCanvas.height = origCanvas.height;
+        destCanvas.getContext('2d').drawImage(origCanvas, 0, 0);
+    });
+
     previewContent.appendChild(clone);
     document.getElementById("reportPreviewModal").style.display = "flex";
   }
