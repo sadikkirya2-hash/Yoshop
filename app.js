@@ -2949,6 +2949,7 @@ async function uploadImage(base64Data, path) {
 
     const reportDate = document.getElementById('reportDate').value;
     const staffFilter = document.getElementById('reportStaffFilter').value;
+    let postRender = null;
 
     let filteredTransactions = transactions.filter(t => {
       if (reportDate) {
@@ -3066,6 +3067,12 @@ async function uploadImage(base64Data, path) {
       });
 
       const sortedItems = Object.entries(itemSales).sort(([,a],[,b]) => b.revenue - a.revenue);
+
+      const totalRevenue = Object.values(itemSales).reduce((sum, d) => sum + d.revenue, 0);
+      const totalCost = Object.values(itemSales).reduce((sum, d) => sum + d.cost, 0);
+      const totalProfitVal = totalRevenue - totalCost;
+      const avgMargin = totalRevenue > 0 ? (totalProfitVal / totalRevenue) * 100 : 0;
+
       let totalSold = 0;
       let totalStock = 0;
       let totalBP = 0;
@@ -3073,8 +3080,16 @@ async function uploadImage(base64Data, path) {
       let grossTotalTP = 0;
       let totalProfit = 0;
 
+      let topProfitItem = { name: 'N/A', val: 0 };
+      let topMarginItem = { name: 'N/A', val: 0 };
+
       const tableBody = sortedItems.map(([name, data], idx) => {
         const itemProfit = data.revenue - data.cost;
+        const itemMargin = data.sp > 0 ? ((data.sp - data.bp) / data.sp) * 100 : 0;
+
+        if (itemProfit > topProfitItem.val) { topProfitItem = { name, val: itemProfit }; }
+        if (itemMargin > topMarginItem.val) { topMarginItem = { name, val: itemMargin }; }
+
         totalSold += data.qty;
         totalStock += data.inStock;
         totalBP += data.bp;
@@ -3098,6 +3113,14 @@ async function uploadImage(base64Data, path) {
           </tr>`;
       }).join('');
       
+      postRender = () => {
+        const marginData = sortedItems.map(([name, data]) => ({
+          name,
+          margin: data.sp > 0 ? ((data.sp - data.bp) / data.sp) * 100 : 0
+        })).sort((a, b) => b.margin - a.margin).slice(0, 10);
+        renderReportProfitChart(marginData);
+      };
+      
       reportHtml = `
         <div class="report-header-info u-mb-20">
           <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -3106,6 +3129,30 @@ async function uploadImage(base64Data, path) {
           </div>
           <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
         </div>
+
+        <div class="dashboard-grid u-mb-20">
+          <div class="dashboard-card" style="border-left: 4px solid #28a745;">
+            <h4>Total Profit</h4>
+            <p><span class="currency-symbol">$</span>${formatCurrency(totalProfitVal)}</p>
+          </div>
+          <div class="dashboard-card" style="border-left: 4px solid #6f42c1;">
+            <h4>Avg. Margin</h4>
+            <p>${avgMargin.toFixed(1)}%</p>
+          </div>
+          <div class="dashboard-card" style="border-left: 4px solid #17a2b8;">
+            <h4>Top Earner</h4>
+            <p style="font-size: 0.75em; color: var(--text);">${topProfitItem.name}</p>
+          </div>
+          <div class="dashboard-card" style="border-left: 4px solid #ffc107;">
+            <h4>Highest Margin</h4>
+            <p style="font-size: 0.75em; color: var(--text);">${topMarginItem.name} (${topMarginItem.val.toFixed(1)}%)</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper u-mb-20" style="max-width: 100%; height: 350px;">
+          <canvas id="reportProfitChart"></canvas>
+        </div>
+
         <table id="reportTable">
           <thead>
             <tr>
@@ -3182,6 +3229,7 @@ async function uploadImage(base64Data, path) {
 
     outputContainer.innerHTML = reportHtml;
     updateCurrencyDisplay();
+    if (postRender) postRender();
   }
 
   function downloadReportPDF() {
@@ -3257,6 +3305,7 @@ async function uploadImage(base64Data, path) {
   let dailySalesChartInstance;
   let adminGlobalRevenueChartInstance;
   let adminShopsComparisonChartInstance;
+  let reportProfitChartInstance;
 
   function updateDashboard() {
     // Initialize with defaults even if data is not yet loaded
@@ -3349,6 +3398,46 @@ async function uploadImage(base64Data, path) {
           tooltip: {
             enabled: data.length > 0
           }
+        }
+      }
+    });
+  }
+
+  function renderReportProfitChart(data) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('reportProfitChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (reportProfitChartInstance) {
+      reportProfitChartInstance.destroy();
+    }
+
+    reportProfitChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.name),
+        datasets: [{
+          label: 'Profit Margin %',
+          data: data.map(d => d.margin),
+          backgroundColor: '#6f42c1',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { 
+            beginAtZero: true,
+            max: 100,
+            ticks: { callback: (value) => value + '%' }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Top 10 Product Profit Margins (%)' }
         }
       }
     });
