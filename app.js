@@ -4328,24 +4328,26 @@ async function uploadImage(base64Data, path) {
     const dishIndexInput = document.getElementById('dishIndex');
     const dishIndex = dishIndexInput ? dishIndexInput.value : '';
 
-    // Only auto-generate if we are creating new OR the barcode is currently empty OR if forced by button
-    if (!force && dishIndex !== '' && barcodeInput && barcodeInput.value !== '') return;
+    // Only auto-generate if the field is empty OR if we are forcing it via the button
+    if (!force && barcodeInput && barcodeInput.value !== '') return;
 
     const name = nameInput ? nameInput.value.trim() : '';
     const cat = catSelect ? catSelect.value : '';
 
     if (force) {
         if (!name || name.length < 2) {
-            return alert("Please enter a product name first (at least 2 letters).");
+            alert("Please enter a product name first (at least 2 letters).");
+            return;
         }
         if (!cat) {
-            return alert("Please select a category first.");
+            alert("Please select a category first.");
+            return;
         }
     }
 
     if (!name || name.length < 2 || !cat || cat.length < 2) return;
 
-    // Extract prefixes based on instructions (first 2 letters)
+    // Extract prefixes (first 2 letters, forced to UPPERCASE)
     const catPrefix = cat.substring(0, 2).toUpperCase();
     const prodPrefix = name.substring(0, 2).toUpperCase();
     const basePrefix = `${catPrefix}-${prodPrefix}-`;
@@ -4353,10 +4355,11 @@ async function uploadImage(base64Data, path) {
     // Find next number in sequence for this specific prefix across existing products
     let maxNum = 0;
     menu.forEach(item => {
-      if (item.barcode && item.barcode.toUpperCase().startsWith(basePrefix)) {
+      if (item.barcode && item.barcode.includes('-')) {
         const parts = item.barcode.split('-');
-        const numPart = parts[parts.length - 1];
-        const num = parseInt(numPart, 10);
+        const lastPart = parts[parts.length - 1];
+        const num = parseInt(lastPart, 10);
+        // Global sequence check: ensures we continue from the last saved product number (e.g. 12 -> 13)
         if (!isNaN(num) && num > maxNum) maxNum = num;
       }
     });
