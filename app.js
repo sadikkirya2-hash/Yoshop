@@ -2928,10 +2928,18 @@ async function uploadImage(base64Data, path) {
   function populateReportFilters() {
     const staffSelect = document.getElementById('reportStaffFilter');
     if (!staffSelect) return;
+    
+    // Always reset filters to "All" and default to Item Sales when opening the tab
+    const dateInput = document.getElementById('reportDate');
+    if (dateInput) dateInput.value = '';
+    const reportTypeSelect = document.getElementById('reportType');
+    if (reportTypeSelect) reportTypeSelect.value = 'itemSales';
+
     staffSelect.innerHTML = '<option value="">All Staff</option>';
     staff.filter(s => s.isActive !== false).forEach(member => {
       staffSelect.innerHTML += `<option value="${member.name}">${member.name}</option>`;
     });
+    staffSelect.value = '';
   }
 
   function renderReport() {
@@ -3026,46 +3034,61 @@ async function uploadImage(base64Data, path) {
 
     } else if (reportType === 'itemSales') {
       const itemSales = filteredTransactions.flatMap(t => t.items || []).reduce((acc, item) => {
-        if (!acc[item.name]) acc[item.name] = { qty: 0, revenue: 0, cost: 0 };
+        if (!acc[item.name]) acc[item.name] = { qty: 0, revenue: 0, cost: 0, bp: 0, sp: 0, inStock: 0 };
         const menuDish = menu.find(d => d.name === item.name);
         const itemCost = menuDish ? calculateDishCost(menuDish) : (parseFloat(item.costPrice) || 0);
         acc[item.name].qty += (item.qty || 0);
         acc[item.name].revenue += (item.qty || 0) * (item.price || 0);
         acc[item.name].cost += (item.qty || 0) * itemCost;
+        // Capture unit prices for display
+        acc[item.name].bp = itemCost;
+        acc[item.name].sp = item.price || 0;
+        // Calculate real-time stock levels
+        acc[item.name].inStock = menuDish ? calculateDishStock(menuDish, true) : 0;
         return acc;
       }, {});
 
       const sortedItems = Object.entries(itemSales).sort(([,a],[,b]) => b.revenue - a.revenue);
+      let grossTotalTP = 0;
 
-      const tableBody = sortedItems.map(([name, data]) => {
-        const profit = data.revenue - data.cost;
-        const margin = data.revenue > 0 ? (profit / data.revenue) * 100 : 0;
+      const tableBody = sortedItems.map(([name, data], idx) => {
+        grossTotalTP += data.revenue;
         return `
           <tr>
+            <td>${idx + 1}</td>
             <td>${name}</td>
             <td class="u-text-right">${data.qty}</td>
+            <td class="u-text-right">${data.inStock}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.bp)}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.sp)}</td>
             <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.revenue)}</td>
-            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(profit)}</td>
-            <td class="u-text-right">${margin.toFixed(1)}%</td>
           </tr>`;
       }).join('');
       
       reportHtml = `
         <div class="report-header-info u-mb-20">
-          <h4 class="u-m-0">Product Sales & Profitability</h4>
-          <p class="u-fs-08 u-text-muted">Breakdown of performance per item sold</p>
+          <h4 class="u-m-0">Product Sales vs Inventory</h4>
+          <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
         </div>
         <table>
           <thead>
             <tr>
-              <th>Product Name</th>
-              <th class="u-text-right">Qty</th>
-              <th class="u-text-right">Revenue</th>
-              <th class="u-text-right">Profit</th>
-              <th class="u-text-right">Margin</th>
+              <th>S/N</th>
+              <th>ITEM</th>
+              <th class="u-text-right">SOLD</th>
+              <th class="u-text-right">STOCK</th>
+              <th class="u-text-right">B.P</th>
+              <th class="u-text-right">S.P</th>
+              <th class="u-text-right">T.P</th>
             </tr>
           </thead>
           <tbody>${tableBody}</tbody>
+          <tfoot>
+            <tr style="font-weight: bold; background: var(--bg);">
+              <td colspan="6" class="u-text-right">THE GROSS TOTAL:</td>
+              <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(grossTotalTP)}</td>
+            </tr>
+          </tfoot>
         </table>`;
 
     } else if (reportType === 'categorySales') {
