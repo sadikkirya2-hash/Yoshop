@@ -3066,10 +3066,22 @@ async function uploadImage(base64Data, path) {
       });
 
       const sortedItems = Object.entries(itemSales).sort(([,a],[,b]) => b.revenue - a.revenue);
+      let totalSold = 0;
+      let totalStock = 0;
+      let totalBP = 0;
+      let totalSP = 0;
       let grossTotalTP = 0;
+      let totalProfit = 0;
 
       const tableBody = sortedItems.map(([name, data], idx) => {
+        const itemProfit = data.revenue - data.cost;
+        totalSold += data.qty;
+        totalStock += data.inStock;
+        totalBP += data.bp;
+        totalSP += data.sp;
         grossTotalTP += data.revenue;
+        totalProfit += itemProfit;
+
         const isLowStock = data.inStock <= threshold;
         const stockStyle = isLowStock ? 'color: #dc3545; font-weight: bold;' : '';
         
@@ -3077,36 +3089,46 @@ async function uploadImage(base64Data, path) {
           <tr>
             <td>${idx + 1}</td>
             <td>${name}</td>
-            <td class="u-text-right">${data.qty}</td>
             <td class="u-text-right" style="${stockStyle}">${data.inStock}</td>
+            <td class="u-text-right">${data.qty}</td>
             <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.bp)}</td>
             <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.sp)}</td>
             <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.revenue)}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(itemProfit)}</td>
           </tr>`;
       }).join('');
       
       reportHtml = `
         <div class="report-header-info u-mb-20">
-          <h4 class="u-m-0">Product Sales vs Inventory</h4>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h4 class="u-m-0">Product Sales vs Inventory</h4>
+            <button class="btn btn-info" onclick="exportReportToCSV()" style="margin:0; padding:6px 12px; font-size:0.8em;">📥 Export CSV</button>
+          </div>
           <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
         </div>
-        <table>
+        <table id="reportTable">
           <thead>
             <tr>
               <th>S/N</th>
               <th>ITEM</th>
-              <th class="u-text-right">SOLD</th>
               <th class="u-text-right">STOCK</th>
+              <th class="u-text-right">SOLD</th>
               <th class="u-text-right">B.P</th>
               <th class="u-text-right">S.P</th>
               <th class="u-text-right">T.P</th>
+              <th class="u-text-right">PROFIT</th>
             </tr>
           </thead>
           <tbody>${tableBody}</tbody>
           <tfoot>
             <tr style="font-weight: bold; background: var(--bg);">
-              <td colspan="6" class="u-text-right">THE GROSS TOTAL:</td>
+              <td colspan="2"></td>
+              <td class="u-text-right">${totalStock}</td>
+              <td class="u-text-right">${totalSold}</td>
+              <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalBP)}</td>
+              <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalSP)}</td>
               <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(grossTotalTP)}</td>
+              <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalProfit)}</td>
             </tr>
           </tfoot>
         </table>`;
@@ -3192,6 +3214,41 @@ async function uploadImage(base64Data, path) {
     }
 
     doc.save(filename);
+  }
+
+  function exportReportToCSV() {
+    const table = document.getElementById('reportTable');
+    if (!table) return alert("Please generate a report first.");
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    
+    // Header
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => `"${th.innerText}"`).join(",");
+    csvContent += headers + "\r\n";
+
+    // Body
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(tr => {
+      const row = Array.from(tr.querySelectorAll('td')).map(td => `"${td.innerText.replace(/[$]|,/g, '').trim()}"`).join(",");
+      csvContent += row + "\r\n";
+    });
+
+    // Footer
+    const footer = table.querySelector('tfoot tr');
+    if (footer) {
+      const footerRow = Array.from(footer.querySelectorAll('td')).map(td => `"${td.innerText.replace(/[$]|,/g, '').trim()}"`).join(",");
+      csvContent += footerRow + "\r\n";
+    }
+
+    const reportType = document.getElementById('reportType').value;
+    const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `report_${reportType}_${reportDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   // ===== Dashboard =====
@@ -6100,7 +6157,7 @@ Object.assign(window, {
   reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff, editStaff, toggleStaffStatus,
   openStaffPermissionsModal, saveStaffPermissions,
   resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
-  toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme,
+  toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme, exportReportToCSV,
   renderStockListTable, editStockItem, toggleStockAdjustmentForm,
   saveStockAdjustment, toggleNewStockItemForm, saveNewStockItem,
   triggerAppUpdate, exportTransactionsToCSV, backupAllData, restoreData,
