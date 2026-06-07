@@ -2966,7 +2966,7 @@ async function uploadImage(base64Data, path) {
     const logoUrl = sanitizeLogoUrl(settings.logo);
     const brandingHeader = `
       <div class="report-branding-header" style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
-        <img src="${logoUrl || 'assets/icons/icon.png'}" onerror="this.src='assets/icons/icon.png';" style="width: 60px; height: 60px; object-fit: contain; border-radius: 8px; background: white; padding: 2px; border: 1px solid var(--border-color);">
+        <img src="${logoUrl || 'assets/icons/icon.png'}" crossorigin="anonymous" onerror="this.src='assets/icons/icon.png';" style="width: 60px; height: 60px; object-fit: contain; border-radius: 8px; background: white; padding: 2px; border: 1px solid var(--border-color);">
         <div style="flex-grow: 1;">
           <h2 style="margin: 0; color: var(--primary);">${settings.name || 'YoShop'}</h2>
           <p style="margin: 2px 0; font-size: 0.85em; opacity: 0.8;">${settings.address || ''}</p>
@@ -3043,6 +3043,10 @@ async function uploadImage(base64Data, path) {
           </div>
         </div>
 
+        <div class="chart-wrapper u-mb-20" style="max-width: 100%; height: 300px;">
+          <canvas id="staffRevenueChart"></canvas>
+        </div>
+
         <div class="u-mb-20">
           <h5>Collected by Payment Method</h5>
           <table id="reportTable">
@@ -3066,6 +3070,10 @@ async function uploadImage(base64Data, path) {
             </tfoot>
           </table>
         </div>`;
+
+      postRender = () => {
+        renderStaffRevenueChart(staffPerformance);
+      };
 
     } else if (reportType === 'itemSales') {
       const threshold = (settings.lowStockThreshold !== undefined && settings.lowStockThreshold !== null) ? settings.lowStockThreshold : 10;
@@ -3387,6 +3395,7 @@ async function uploadImage(base64Data, path) {
   let dailySalesChartInstance;
   let adminGlobalRevenueChartInstance;
   let adminShopsComparisonChartInstance;
+  let staffRevenueChartInstance;
   let reportProfitChartInstance;
 
   function updateDashboard() {
@@ -3480,6 +3489,43 @@ async function uploadImage(base64Data, path) {
           tooltip: {
             enabled: data.length > 0
           }
+        }
+      }
+    });
+  }
+
+  function renderStaffRevenueChart(data) {
+    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('staffRevenueChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (staffRevenueChartInstance) {
+      staffRevenueChartInstance.destroy();
+    }
+
+    const sortedData = Object.entries(data).sort(([,a], [,b]) => b - a);
+    const labels = sortedData.map(([name]) => name);
+    const values = sortedData.map(([, val]) => val);
+
+    staffRevenueChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Revenue',
+          data: values,
+          backgroundColor: '#3d5a80',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Revenue Comparison by Staff Member' }
         }
       }
     });
