@@ -3018,7 +3018,7 @@ async function uploadImage(base64Data, path) {
 
         <div class="u-mb-20">
           <h5>Collected by Payment Method</h5>
-          <table>
+          <table id="reportTable">
             <thead>
               <tr><th>Method</th><th class="u-text-right">Total Revenue</th><th class="u-text-right">% Share</th></tr>
             </thead>
@@ -3123,10 +3123,7 @@ async function uploadImage(base64Data, path) {
       
       reportHtml = `
         <div class="report-header-info u-mb-20">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h4 class="u-m-0">Product Sales vs Inventory</h4>
-            <button class="btn btn-info" onclick="exportReportToCSV()" style="margin:0; padding:6px 12px; font-size:0.8em;">📥 Export CSV</button>
-          </div>
+          <h4 class="u-m-0">Product Sales vs Inventory</h4>
           <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
         </div>
 
@@ -3168,8 +3165,8 @@ async function uploadImage(base64Data, path) {
           </thead>
           <tbody>${tableBody}</tbody>
           <tfoot>
-            <tr style="font-weight: bold; background: var(--bg);">
-              <td colspan="2"></td>
+            <tr style="font-weight: bold; background: var(--bg); border-top: 2px solid var(--text);">
+              <td colspan="2">ToTal</td>
               <td class="u-text-right">${totalStock}</td>
               <td class="u-text-right">${totalSold}</td>
               <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalBP)}</td>
@@ -3181,6 +3178,10 @@ async function uploadImage(base64Data, path) {
         </table>`;
 
     } else if (reportType === 'categorySales') {
+      let totalQty = 0;
+      let totalRev = 0;
+      let totalProfit = 0;
+
       const categorySales = filteredTransactions.flatMap(t => t.items || []).reduce((acc, item) => {
         const dish = menu.find(d => d.name === item.name);
         const category = dish ? dish.category : 'Uncategorized';
@@ -3198,6 +3199,9 @@ async function uploadImage(base64Data, path) {
       const tableBody = sortedCategories.map(([name, data]) => {
         const profit = data.revenue - data.cost;
         const margin = data.revenue > 0 ? (profit / data.revenue) * 100 : 0;
+        totalQty += data.qty;
+        totalRev += data.revenue;
+        totalProfit += profit;
         return `
           <tr>
             <td>${name}</td>
@@ -3208,12 +3212,14 @@ async function uploadImage(base64Data, path) {
           </tr>`;
       }).join('');
 
+      const totalMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
+
       reportHtml = `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Category Sales & Profitability</h4>
           <p class="u-fs-08 u-text-muted">Performance breakdown per category</p>
         </div>
-        <table>
+        <table id="reportTable">
           <thead>
             <tr>
               <th>Category</th>
@@ -3224,6 +3230,15 @@ async function uploadImage(base64Data, path) {
             </tr>
           </thead>
           <tbody>${tableBody}</tbody>
+          <tfoot>
+            <tr style="font-weight: bold; background: var(--bg); border-top: 2px solid var(--text);">
+              <td>ToTal</td>
+              <td class="u-text-right">${totalQty}</td>
+              <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalRev)}</td>
+              <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalProfit)}</td>
+              <td class="u-text-right">${totalMargin.toFixed(1)}%</td>
+            </tr>
+          </tfoot>
         </table>`;
     }
 
@@ -3232,36 +3247,69 @@ async function uploadImage(base64Data, path) {
     if (postRender) postRender();
   }
 
-  function downloadReportPDF() {
-    if (typeof window.jspdf === 'undefined') {
-        alert("PDF generation libraries are not loaded. Please check your internet connection.");
+  async function downloadReportPDF() {
+    if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
+        alert("PDF/Image generation libraries are not loaded. Please check your internet connection.");
         return;
     }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
     const reportOutput = document.getElementById('reportOutput');
-    const reportTitle = reportOutput.querySelector('h4');
-    const reportTable = reportOutput.querySelector('table');
-
-    if (!reportTitle) {
+    if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
       return alert("Please generate a report first before downloading.");
     }
 
-    const titleText = reportTitle.innerText;
-    const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
-    const filename = `${titleText.replace(/ /g, '_')}_${reportDate}.pdf`;
+    const { jsPDF } = window.jspdf;
+    
+    try {
+        const canvas = await html2canvas(reportOutput, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg')
+        });
 
-    doc.text(titleText, 14, 15);
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-    if (reportTable) {
-      doc.autoTable({ html: reportTable, startY: 25 });
-    } else {
-      // For summary report which has no table
-      const summaryText = reportOutput.innerText;
-      doc.text(summaryText, 14, 25);
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, 297));
+        
+        const reportType = document.getElementById('reportType').value;
+        const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
+        pdf.save(`YoShop_Report_${reportType}_${reportDate}.pdf`);
+
+    } catch (error) {
+        console.error("Error generating PDF:", error);
+        alert("Could not generate PDF. Please try again.");
+    }
+  }
+
+  async function exportReportAsImage() {
+    if (typeof html2canvas === 'undefined') {
+        alert("Image generation library is not loaded. Please check your internet connection.");
+        return;
+    }
+    const reportOutput = document.getElementById('reportOutput');
+    if (!reportOutput || reportOutput.innerText.trim() === '' || reportOutput.innerText.includes('No data available')) {
+      return alert("Please generate a report first.");
     }
 
-    doc.save(filename);
+    try {
+        const canvas = await html2canvas(reportOutput, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: getComputedStyle(document.body).getPropertyValue('--bg')
+        });
+        
+        const link = document.createElement('a');
+        const reportType = document.getElementById('reportType').value;
+        const reportDate = document.getElementById('reportDate').value || new Date().toISOString().split('T')[0];
+        link.download = `YoShop_Report_${reportType}_${reportDate}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    } catch (error) {
+        console.error("Error generating image:", error);
+        alert("Could not generate report image.");
+    }
   }
 
   function exportReportToCSV() {
@@ -6253,7 +6301,7 @@ Object.assign(window, {
   manualBarcodeInput, startCameraScan, closeCameraScanner, startMobileConnection, login, loginWithEmail, registerWithEmail, handleForgotPassword, logout, syncNow,
   closeMobileConnectModal, generateAndPrintBarcodes, requestNotificationPermission,
   showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
-  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus
+  clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus, exportReportAsImage
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
   switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode

@@ -542,7 +542,9 @@
           <div class="input-row u-flex-nowrap u-flex-grow-1">
             <select id="reportStaffFilter" onchange="renderReport()" class="u-flex-basis-150"><option value="">All Staff</option></select>
             <button class="btn u-flex-grow-1" onclick="renderReport()">Generate</button>
-            <button class="btn btn-primary-blue u-flex-grow-1" onclick="downloadReportPDF()">Download PDF</button>
+            <button class="btn btn-primary-blue" style="margin: 5px 2px;" onclick="downloadReportPDF()" title="Download PDF">PDF</button>
+            <button class="btn btn-info" style="margin: 5px 2px;" onclick="exportReportAsImage()" title="Download Image">Image</button>
+            <button class="btn btn-success" style="margin: 5px 2px;" onclick="exportReportToCSV()" title="Export Excel/CSV">Excel</button>
           </div>
         </div>
         <div id="reportOutput" style="overflow-x: auto;"></div>
