@@ -2959,6 +2959,8 @@ async function uploadImage(base64Data, path) {
 
     const reportDate = document.getElementById('reportDate').value;
     const staffFilter = document.getElementById('reportStaffFilter').value;
+    const showCards = document.getElementById('showReportCards')?.checked ?? true;
+    const showCharts = document.getElementById('showReportCharts')?.checked ?? true;
     let postRender = null;
     const now = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -3055,13 +3057,7 @@ async function uploadImage(base64Data, path) {
         return acc;
       }, {});
 
-      reportHtml = brandingHeader + watermarkHtml + `
-        <div class="report-header-info u-mb-20">
-          <h4 class="u-m-0">Financial Performance Summary</h4>
-          <p class="u-fs-08 u-text-muted">Data Range: ${reportDate || 'All Time'} | ${totalBills} Transactions</p>
-          ${topStaffInfo}
-        </div>
-        
+      const cardsHtml = showCards ? `
         <div class="dashboard-grid u-mb-20">
           <div class="dashboard-card" style="border-left: 4px solid #28a745;">
             <h4>Total Sales</h4>
@@ -3079,16 +3075,24 @@ async function uploadImage(base64Data, path) {
             <h4>Avg. Bill</h4>
             <p><span class="currency-symbol">$</span>${formatCurrency(avgBill)}</p>
           </div>
-        </div>
+        </div>` : '';
 
+      const chartsHtml = showCharts ? `
         <div class="chart-wrapper u-mb-20" style="max-width: 100%; height: 300px;">
           <canvas id="staffRevenueChart"></canvas>
         </div>
-
         <div class="chart-wrapper u-mb-20" style="max-width: 100%; height: 300px;">
           <canvas id="monthlyRevenueChart"></canvas>
-        </div>
+        </div>` : '';
 
+      reportHtml = brandingHeader + watermarkHtml + `
+        <div class="report-header-info u-mb-20">
+          <h4 class="u-m-0">Financial Performance Summary</h4>
+          <p class="u-fs-08 u-text-muted">Data Range: ${reportDate || 'All Time'} | ${totalBills} Transactions</p>
+          ${topStaffInfo}
+        </div>
+        ${cardsHtml}
+        ${chartsHtml}
         <div class="u-mb-20">
           <h5>Collected by Payment Method</h5>
           <table id="reportTable">
@@ -3113,10 +3117,12 @@ async function uploadImage(base64Data, path) {
           </table>
         </div>`;
 
-      postRender = () => {
-        renderStaffRevenueChart(staffPerformance);
-        renderMonthlyRevenueChart(monthlyRevenueData);
-      };
+      if (showCharts) {
+        postRender = () => {
+          renderStaffRevenueChart(staffPerformance);
+          renderMonthlyRevenueChart(monthlyRevenueData);
+        };
+      }
 
     } else if (reportType === 'itemSales') {
       const threshold = (settings.lowStockThreshold !== undefined && settings.lowStockThreshold !== null) ? settings.lowStockThreshold : 10;
@@ -3198,20 +3204,17 @@ async function uploadImage(base64Data, path) {
           </tr>`;
       }).join('');
       
-      postRender = () => {
-        const marginData = sortedItems.map(([name, data]) => ({
-          name,
-          margin: data.sp > 0 ? ((data.sp - data.bp) / data.sp) * 100 : 0
-        })).sort((a, b) => b.margin - a.margin).slice(0, 10);
-        renderReportProfitChart(marginData);
-      };
-      
-      reportHtml = brandingHeader + watermarkHtml + `
-        <div class="report-header-info u-mb-20">
-          <h4 class="u-m-0">Product Sales vs Inventory</h4>
-          <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
-        </div>
+      if (showCharts) {
+        postRender = () => {
+          const marginData = sortedItems.map(([name, data]) => ({
+            name,
+            margin: data.sp > 0 ? ((data.sp - data.bp) / data.sp) * 100 : 0
+          })).sort((a, b) => b.margin - a.margin).slice(0, 10);
+          renderReportProfitChart(marginData);
+        };
+      }
 
+      const cardsHtml = showCards ? `
         <div class="dashboard-grid u-mb-20">
           <div class="dashboard-card" style="border-left: 4px solid #28a745;">
             <h4>Total Profit</h4>
@@ -3229,12 +3232,20 @@ async function uploadImage(base64Data, path) {
             <h4>Highest Margin</h4>
             <p style="font-size: 0.75em; color: var(--text);">${topMarginItem.name} (${topMarginItem.val.toFixed(1)}%)</p>
           </div>
-        </div>
+        </div>` : '';
 
+      const chartsHtml = showCharts ? `
         <div class="chart-wrapper u-mb-20" style="max-width: 100%; height: 350px;">
           <canvas id="reportProfitChart"></canvas>
+        </div>` : '';
+      
+      reportHtml = brandingHeader + watermarkHtml + `
+        <div class="report-header-info u-mb-20">
+          <h4 class="u-m-0">Product Sales vs Inventory</h4>
+          <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
         </div>
-
+        ${cardsHtml}
+        ${chartsHtml}
         <table id="reportTable">
           <thead>
             <tr>
@@ -3359,6 +3370,11 @@ async function uploadImage(base64Data, path) {
 
   function toggleReportCategoryDropdown() {
     const dropdown = document.getElementById('reportCategoryDropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function toggleReportOptionsDropdown() {
+    const dropdown = document.getElementById('reportOptionsDropdown');
     dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
   }
 
@@ -6562,4 +6578,5 @@ Object.assign(window, {
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
   switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode, toggleReportCategoryDropdown
+  , toggleReportOptionsDropdown
 });

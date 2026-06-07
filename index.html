@@ -555,6 +555,13 @@
               <option value="categorySales">Category Report</option>
             </select>
             <input type="date" id="reportDate" onchange="renderReport()" class="u-flex-basis-150">
+            <div id="reportOptionsFilterContainer" class="u-flex-basis-150" style="position:relative;">
+              <button class="btn u-w-full u-m-0" onclick="toggleReportOptionsDropdown()" style="font-size:0.8em; padding:8px; background:var(--card); color:var(--text); border:1px solid var(--border-color);">Options</button>
+              <div id="reportOptionsDropdown" style="display:none; position:absolute; top:100%; left:0; width:200px; background:var(--card); border:1px solid var(--border-color); z-index:1000; padding:15px; box-shadow:0 10px 25px rgba(0,0,0,0.2); border-radius:8px;">
+                <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; cursor:pointer; color:var(--text); font-size:0.9em;"><input type="checkbox" id="showReportCards" checked onchange="renderReport()"> Summary Cards</label>
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text); font-size:0.9em;"><input type="checkbox" id="showReportCharts" checked onchange="renderReport()"> Charts</label>
+              </div>
+            </div>
           </div>
           <div class="input-row u-flex-nowrap u-flex-grow-1">
             <select id="reportStaffFilter" onchange="renderReport()" class="u-flex-basis-150"><option value="">All Staff</option></select>
