@@ -2950,6 +2950,7 @@ async function uploadImage(base64Data, path) {
     const reportDate = document.getElementById('reportDate').value;
     const staffFilter = document.getElementById('reportStaffFilter').value;
     let postRender = null;
+    const now = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     let filteredTransactions = transactions.filter(t => {
       if (reportDate) {
@@ -2961,11 +2962,25 @@ async function uploadImage(base64Data, path) {
       return true;
     });
 
+    const logoUrl = sanitizeLogoUrl(settings.logo);
+    const brandingHeader = `
+      <div class="report-branding-header" style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
+        <img src="${logoUrl || 'assets/icons/icon.png'}" onerror="this.src='assets/icons/icon.png';" style="width: 60px; height: 60px; object-fit: contain; border-radius: 8px; background: white; padding: 2px; border: 1px solid var(--border-color);">
+        <div style="flex-grow: 1;">
+          <h2 style="margin: 0; color: var(--primary);">${settings.name || 'YoShop'}</h2>
+          <p style="margin: 2px 0; font-size: 0.85em; opacity: 0.8;">${settings.address || ''}</p>
+        </div>
+        <div style="text-align: right; font-size: 0.75em; opacity: 0.6;">
+          <p style="margin: 0; font-weight: bold; color: var(--primary);">OFFICIAL REPORT</p>
+          <p style="margin: 2px 0 0 0;">Generated: ${now}</p>
+        </div>
+      </div>
+    `;
+
     if (filteredTransactions.length === 0) {
       outputContainer.innerHTML = '<p style="text-align: center; padding: 20px; color: #888;">No data available for the selected filters.</p>';
       return;
     }
-
     let reportHtml = '';
 
     if (reportType === 'salesSummary') {
@@ -2991,7 +3006,7 @@ async function uploadImage(base64Data, path) {
         return acc;
       }, {});
 
-      reportHtml = `
+      reportHtml = brandingHeader + `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Financial Performance Summary</h4>
           <p class="u-fs-08 u-text-muted">Data Range: ${reportDate || 'All Time'} | ${totalBills} Transactions</p>
@@ -3030,6 +3045,13 @@ async function uploadImage(base64Data, path) {
                   <td class="u-text-right">${((total / totalRevenue) * 100).toFixed(1)}%</td>
                 </tr>`).join('')}
             </tbody>
+            <tfoot>
+              <tr class="u-bold">
+                <td>ToTal</td>
+                <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalRevenue)}</td>
+                <td class="u-text-right">100%</td>
+              </tr>
+            </tfoot>
           </table>
         </div>`;
 
@@ -3121,7 +3143,7 @@ async function uploadImage(base64Data, path) {
         renderReportProfitChart(marginData);
       };
       
-      reportHtml = `
+      reportHtml = brandingHeader + `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Product Sales vs Inventory</h4>
           <p class="u-fs-08 u-text-muted">Tracking quantities sold against remaining stock levels</p>
@@ -3165,7 +3187,7 @@ async function uploadImage(base64Data, path) {
           </thead>
           <tbody>${tableBody}</tbody>
           <tfoot>
-            <tr style="font-weight: bold; background: var(--bg); border-top: 2px solid var(--text);">
+            <tr class="u-bold">
               <td colspan="2">ToTal</td>
               <td class="u-text-right">${totalStock}</td>
               <td class="u-text-right">${totalSold}</td>
@@ -3214,7 +3236,7 @@ async function uploadImage(base64Data, path) {
 
       const totalMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
 
-      reportHtml = `
+      reportHtml = brandingHeader + `
         <div class="report-header-info u-mb-20">
           <h4 class="u-m-0">Category Sales & Profitability</h4>
           <p class="u-fs-08 u-text-muted">Performance breakdown per category</p>
@@ -3231,7 +3253,7 @@ async function uploadImage(base64Data, path) {
           </thead>
           <tbody>${tableBody}</tbody>
           <tfoot>
-            <tr style="font-weight: bold; background: var(--bg); border-top: 2px solid var(--text);">
+            <tr class="u-bold">
               <td>ToTal</td>
               <td class="u-text-right">${totalQty}</td>
               <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(totalRev)}</td>
