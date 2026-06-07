@@ -1066,6 +1066,9 @@ async function uploadImage(base64Data, path) {
 
   async function login() {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
     const btn = document.querySelector('#login-overlay button');
     const originalContent = btn ? btn.innerHTML : 'Login with Google';
     if (btn) btn.innerHTML = '<span class="spinner"></span> Signing in...';

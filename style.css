@@ -313,7 +313,7 @@
   .menu-grid {
     display: grid;
     /* Adjust for smaller cards to fit more on one row */
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); 
     gap: 15px;
   }
   .menu-item {
@@ -685,8 +685,7 @@
 
   /* Media query for smaller screens */
   @media (max-width: 480px) {
-    .menu-grid, #tablesGrid {
-      /* Force 2 columns on very small screens for better readability */
+    #tablesGrid {
       grid-template-columns: repeat(2, 1fr);
     }
   }
