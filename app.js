@@ -2953,55 +2953,166 @@ async function uploadImage(base64Data, path) {
     });
 
     if (filteredTransactions.length === 0) {
-      outputContainer.innerHTML = '<p style="text-align: center;">No data available for the selected filters.</p>';
+      outputContainer.innerHTML = '<p style="text-align: center; padding: 20px; color: #888;">No data available for the selected filters.</p>';
       return;
     }
 
     let reportHtml = '';
 
     if (reportType === 'salesSummary') {
-      const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.total, 0);
+      const totalRevenue = filteredTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
       const totalBills = filteredTransactions.length;
+      
+      let totalCost = 0;
+      filteredTransactions.forEach(t => {
+        (t.items || []).forEach(item => {
+          const menuDish = menu.find(d => d.name === item.name);
+          const itemCost = menuDish ? calculateDishCost(menuDish) : (parseFloat(item.costPrice) || 0);
+          totalCost += (itemCost * (item.qty || 0));
+        });
+      });
+
+      const totalProfit = totalRevenue - totalCost;
+      const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+      const avgBill = totalBills > 0 ? totalRevenue / totalBills : 0;
+
       const paymentMethods = filteredTransactions.reduce((acc, t) => {
-        acc[t.paymentMethod] = (acc[t.paymentMethod] || 0) + t.total;
+        const method = t.paymentMethod || 'Unknown';
+        acc[method] = (acc[method] || 0) + (t.total || 0);
         return acc;
       }, {});
 
-      reportHtml = `<h4>Summary Report</h4>
-        <p><strong>Total Revenue:</strong> <span class="currency-symbol">$</span>${formatCurrency(totalRevenue)}</p>
-        <p><strong>Total Bills:</strong> ${totalBills}</p>
-        <h5>Revenue by Payment Method:</h5>
-        <ul>
-          ${Object.entries(paymentMethods).map(([method, total]) => `<li>${method}: <span class="currency-symbol">$</span>${formatCurrency(total)}</li>`).join('')}
-        </ul>`;
+      reportHtml = `
+        <div class="report-header-info u-mb-20">
+          <h4 class="u-m-0">Financial Performance Summary</h4>
+          <p class="u-fs-08 u-text-muted">Data Range: ${reportDate || 'All Time'} | ${totalBills} Transactions</p>
+        </div>
+        
+        <div class="dashboard-grid u-mb-20">
+          <div class="dashboard-card" style="border-left: 4px solid #28a745;">
+            <h4>Total Sales</h4>
+            <p><span class="currency-symbol">$</span>${formatCurrency(totalRevenue)}</p>
+          </div>
+          <div class="dashboard-card" style="border-left: 4px solid #17a2b8;">
+            <h4>Net Profit</h4>
+            <p><span class="currency-symbol">$</span>${formatCurrency(totalProfit)}</p>
+          </div>
+          <div class="dashboard-card" style="border-left: 4px solid #6f42c1;">
+            <h4>Margin</h4>
+            <p>${profitMargin.toFixed(1)}%</p>
+          </div>
+          <div class="dashboard-card" style="border-left: 4px solid #ffc107;">
+            <h4>Avg. Bill</h4>
+            <p><span class="currency-symbol">$</span>${formatCurrency(avgBill)}</p>
+          </div>
+        </div>
+
+        <div class="u-mb-20">
+          <h5>Collected by Payment Method</h5>
+          <table>
+            <thead>
+              <tr><th>Method</th><th class="u-text-right">Total Revenue</th><th class="u-text-right">% Share</th></tr>
+            </thead>
+            <tbody>
+              ${Object.entries(paymentMethods).map(([method, total]) => `
+                <tr>
+                  <td>${method}</td>
+                  <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(total)}</td>
+                  <td class="u-text-right">${((total / totalRevenue) * 100).toFixed(1)}%</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
 
     } else if (reportType === 'itemSales') {
-      const itemSales = filteredTransactions.flatMap(t => t.items).reduce((acc, item) => {
-        if (!acc[item.name]) acc[item.name] = { qty: 0, total: 0 };
-        acc[item.name].qty += item.qty;
-        acc[item.name].total += item.qty * item.price;
+      const itemSales = filteredTransactions.flatMap(t => t.items || []).reduce((acc, item) => {
+        if (!acc[item.name]) acc[item.name] = { qty: 0, revenue: 0, cost: 0 };
+        const menuDish = menu.find(d => d.name === item.name);
+        const itemCost = menuDish ? calculateDishCost(menuDish) : (parseFloat(item.costPrice) || 0);
+        acc[item.name].qty += (item.qty || 0);
+        acc[item.name].revenue += (item.qty || 0) * (item.price || 0);
+        acc[item.name].cost += (item.qty || 0) * itemCost;
         return acc;
       }, {});
 
-      const sortedItems = Object.entries(itemSales).sort(([,a],[,b]) => b.qty - a.qty);
+      const sortedItems = Object.entries(itemSales).sort(([,a],[,b]) => b.revenue - a.revenue);
 
-      const tableBody = sortedItems.map(([name, data]) => `<tr><td>${name}</td><td style="text-align: right;">${data.qty}</td><td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(data.total)}</td></tr>`).join('');
-      reportHtml = `<h4>Item Report</h4><table><thead><tr><th>Item</th><th style="text-align: right;">Quantity Sold</th><th style="text-align: right;">Total Revenue</th></tr></thead><tbody>${tableBody}</tbody></table>`;
+      const tableBody = sortedItems.map(([name, data]) => {
+        const profit = data.revenue - data.cost;
+        const margin = data.revenue > 0 ? (profit / data.revenue) * 100 : 0;
+        return `
+          <tr>
+            <td>${name}</td>
+            <td class="u-text-right">${data.qty}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.revenue)}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(profit)}</td>
+            <td class="u-text-right">${margin.toFixed(1)}%</td>
+          </tr>`;
+      }).join('');
+      
+      reportHtml = `
+        <div class="report-header-info u-mb-20">
+          <h4 class="u-m-0">Product Sales & Profitability</h4>
+          <p class="u-fs-08 u-text-muted">Breakdown of performance per item sold</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th class="u-text-right">Qty</th>
+              <th class="u-text-right">Revenue</th>
+              <th class="u-text-right">Profit</th>
+              <th class="u-text-right">Margin</th>
+            </tr>
+          </thead>
+          <tbody>${tableBody}</tbody>
+        </table>`;
 
     } else if (reportType === 'categorySales') {
-      const categorySales = filteredTransactions.flatMap(t => t.items).reduce((acc, item) => {
+      const categorySales = filteredTransactions.flatMap(t => t.items || []).reduce((acc, item) => {
         const dish = menu.find(d => d.name === item.name);
         const category = dish ? dish.category : 'Uncategorized';
-        if (!acc[category]) acc[category] = { qty: 0, total: 0 };
-        acc[category].qty += item.qty;
-        acc[category].total += item.qty * item.price;
+        if (!acc[category]) acc[category] = { qty: 0, revenue: 0, cost: 0 };
+        const menuDish = menu.find(d => d.name === item.name);
+        const itemCost = menuDish ? calculateDishCost(menuDish) : (parseFloat(item.costPrice) || 0);
+        acc[category].qty += (item.qty || 0);
+        acc[category].revenue += (item.qty || 0) * (item.price || 0);
+        acc[category].cost += (item.qty || 0) * itemCost;
         return acc;
       }, {});
 
-      const sortedCategories = Object.entries(categorySales).sort(([,a],[,b]) => b.total - a.total);
+      const sortedCategories = Object.entries(categorySales).sort(([,a],[,b]) => b.revenue - a.revenue);
       
-      const tableBody = sortedCategories.map(([name, data]) => `<tr><td>${name}</td><td style="text-align: right;">${data.qty}</td><td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(data.total)}</td></tr>`).join('');
-      reportHtml = `<h4>Category Report</h4><table><thead><tr><th>Category</th><th style="text-align: right;">Quantity Sold</th><th style="text-align: right;">Total Revenue</th></tr></thead><tbody>${tableBody}</tbody></table>`;
+      const tableBody = sortedCategories.map(([name, data]) => {
+        const profit = data.revenue - data.cost;
+        const margin = data.revenue > 0 ? (profit / data.revenue) * 100 : 0;
+        return `
+          <tr>
+            <td>${name}</td>
+            <td class="u-text-right">${data.qty}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(data.revenue)}</td>
+            <td class="u-text-right"><span class="currency-symbol">$</span>${formatCurrency(profit)}</td>
+            <td class="u-text-right">${margin.toFixed(1)}%</td>
+          </tr>`;
+      }).join('');
+
+      reportHtml = `
+        <div class="report-header-info u-mb-20">
+          <h4 class="u-m-0">Category Sales & Profitability</h4>
+          <p class="u-fs-08 u-text-muted">Performance breakdown per category</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="u-text-right">Units</th>
+              <th class="u-text-right">Revenue</th>
+              <th class="u-text-right">Profit</th>
+              <th class="u-text-right">Margin</th>
+            </tr>
+          </thead>
+          <tbody>${tableBody}</tbody>
+        </table>`;
     }
 
     outputContainer.innerHTML = reportHtml;
