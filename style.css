@@ -256,7 +256,7 @@
   /* Menu layout */
   .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 10px;
     margin-bottom: 20px;
   }
@@ -313,7 +313,7 @@
   .menu-grid {
     display: grid;
     /* Fluid grid that stretches items to fill the entire screen width and wraps naturally */
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); 
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); 
     gap: 10px;
     width: 100%;
   }
@@ -683,7 +683,14 @@
   /* Media query for smaller screens */
   @media (max-width: 480px) {
     #tablesGrid {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    }
+    .menu-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+    /* Prevent report tables from squishing on tiny screens */
+    #reportOutput table, .report-branding-header {
+      min-width: 750px;
     }
   }
 
@@ -1559,3 +1566,32 @@ body.dark-mode #reportOutput table tfoot tr {
   box-shadow: 0 10px 20px rgba(0,0,0,0.05);
 }
 .shop-card-status.deactivated { background: #dc3545; color: white; }
+
+/* Report Scrolling and Zoomable Preview */
+#reportOutput {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--card);
+  padding: 15px;
+  border-radius: 12px;
+}
+
+#reportPreviewContent {
+  overflow: auto;
+  background: #f0f2f5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+}
+
+#preview-zoom-wrapper {
+  transform-origin: top center;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: white;
+  padding: 40px;
+  box-shadow: 0 0 30px rgba(0,0,0,0.15);
+  color: black;
+  width: 850px; /* Desktop standard width for reports */
+  margin: 20px 0;
+}

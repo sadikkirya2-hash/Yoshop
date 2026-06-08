@@ -3350,9 +3350,28 @@ async function uploadImage(base64Data, path) {
     }
     const previewContent = document.getElementById("reportPreviewContent");
     previewContent.innerHTML = "";
+
+    // Add Interactive Zoom Controls
+    const controls = document.createElement('div');
+    controls.className = 'zoom-controls';
+    controls.style.cssText = 'position:sticky; top:0; z-index:100; display:flex; gap:10px; padding:15px; justify-content:center; width:100%; background:rgba(255,255,255,0.9); border-bottom:1px solid #ddd; backdrop-filter:blur(5px);';
+    controls.innerHTML = `
+      <button class="btn btn-secondary" onclick="changeReportZoom(-0.1)" style="margin:0; width:45px; height:45px; border-radius:50%; font-size:1.5em; font-weight:bold;">-</button>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:80px;">
+        <span style="font-size:0.7em; text-transform:uppercase; color:#666; font-weight:bold;">Zoom</span>
+        <span id="zoom-percentage" style="font-weight:bold; color:var(--primary);">100%</span>
+      </div>
+      <button class="btn btn-secondary" onclick="changeReportZoom(0.1)" style="margin:0; width:45px; height:45px; border-radius:50%; font-size:1.5em; font-weight:bold;">+</button>
+      <button class="btn btn-info u-fs-08" onclick="changeReportZoom(1 - reportZoomLevel)" style="margin:0; margin-left:15px; border-radius:20px; padding:0 15px;">Reset</button>
+    `;
+    previewContent.appendChild(controls);
+
+    const zoomWrapper = document.createElement('div');
+    zoomWrapper.id = 'preview-zoom-wrapper';
     
     // Deep clone the report
     const clone = original.cloneNode(true);
+    clone.style.width = '100%';
     
     // Canvas contents (Charts) are not copied by cloneNode. We must copy them manually.
     const originalCanvases = original.querySelectorAll('canvas');
@@ -3364,8 +3383,27 @@ async function uploadImage(base64Data, path) {
         destCanvas.getContext('2d').drawImage(origCanvas, 0, 0);
     });
 
-    previewContent.appendChild(clone);
+    zoomWrapper.appendChild(clone);
+    previewContent.appendChild(zoomWrapper);
+    
+    // Initialize zoom state
+    window.reportZoomLevel = 1;
+
     document.getElementById("reportPreviewModal").style.display = "flex";
+  }
+
+  function changeReportZoom(delta) {
+    window.reportZoomLevel = Math.max(0.4, Math.min(2.0, (window.reportZoomLevel || 1) + delta));
+    const wrapper = document.getElementById('preview-zoom-wrapper');
+    const display = document.getElementById('zoom-percentage');
+    if (wrapper) {
+      wrapper.style.transform = `scale(${window.reportZoomLevel})`;
+      if (display) display.textContent = Math.round(window.reportZoomLevel * 100) + '%';
+      
+      // Maintain scrollability by adding bottom margin equal to the overflow created by scaling
+      const extraHeight = wrapper.offsetHeight * (window.reportZoomLevel - 1);
+      wrapper.style.marginBottom = (extraHeight > 0 ? extraHeight + 40 : 20) + 'px';
+    }
   }
 
   function toggleReportCategoryDropdown() {
@@ -6578,5 +6616,5 @@ Object.assign(window, {
   ,
   refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
   switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode, toggleReportCategoryDropdown
-  , toggleReportOptionsDropdown
+  , toggleReportOptionsDropdown, changeReportZoom
 });
