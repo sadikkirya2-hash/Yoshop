@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yoshop-v18'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yoshop-v19'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
@@ -60,8 +60,9 @@ self.addEventListener('fetch', (event) => {
               return caches.match('/index.html');
             }
             // Return a standard error response to trigger the element's onerror handler without crashing the service worker
-            return Response.error();
-          });
+            return new Response('Network error occurred', { status: 408, headers: { 'Content-Type': 'text/plain' } });
+          })
+          .then(res => res);
       })
   );
 });

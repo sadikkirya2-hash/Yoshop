@@ -2822,6 +2822,7 @@ async function uploadImage(base64Data, path) {
       // Fallback for old transactions that might not have subtotal/tax saved
       const displaySubtotal = subtotal !== undefined ? subtotal : total; // If no tax info, assume total is subtotal
       const displayTax = tax !== undefined ? tax : 0;
+      let logoUrl = sanitizeLogoUrl(settings.logo);
 
       const itemsHtml = items.map(o => {
         const notesHtml = o.notes ? `<br><small style="font-style: italic;">- ${o.notes}</small>` : '';
@@ -2844,7 +2845,7 @@ async function uploadImage(base64Data, path) {
         ? `<div class="summary-line"><span>Tax (${settings.taxRate}%)</span> <span><span class="currency-symbol">${currencySymbol}</span>${formatCurrency(displayTax)}</span></div>` 
         : '';
       
-      const logoUrl = sanitizeLogoUrl(settings.logo);
+      logoUrl = sanitizeLogoUrl(settings.logo);
       const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
 
       const receiptHtml = `
