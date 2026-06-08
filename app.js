@@ -1437,7 +1437,7 @@ async function uploadImage(base64Data, path) {
             };
 
             item.innerHTML = `
-              <img src="${dish.image}" alt="">
+              <img src="${dish.image}" crossorigin="anonymous" alt="">
               <div class="menu-item-body">
                 <div class="menu-item-header">
                   <h4>${dish.name}</h4>
@@ -2244,7 +2244,7 @@ async function uploadImage(base64Data, path) {
       const sellingPrice = dish.price || 0;
       const profitValue = sellingPrice - costPrice;
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td><img src="${dish.image}" alt=""></td>
+      tr.innerHTML = `<td><img src="${dish.image}" crossorigin="anonymous" alt=""></td>
         <td>${dish.name}</td> 
         <td class="u-text-right u-nowrap"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(costPrice)}</td>
         <td class="u-text-right u-nowrap"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(sellingPrice)}</td>
@@ -2845,8 +2845,7 @@ async function uploadImage(base64Data, path) {
         ? `<div class="summary-line"><span>Tax (${settings.taxRate}%)</span> <span><span class="currency-symbol">${currencySymbol}</span>${formatCurrency(displayTax)}</span></div>` 
         : '';
       
-      logoUrl = sanitizeLogoUrl(settings.logo);
-      const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
+      const logoHtml = logoUrl ? `<img src="${logoUrl}" crossorigin="anonymous" onerror="this.removeAttribute('crossorigin'); this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
 
       const receiptHtml = `
         <div class="receipt-header">
@@ -5380,7 +5379,7 @@ async function uploadImage(base64Data, path) {
     let overlay = document.getElementById('login-overlay');
     const logoUrl = sanitizeLogoUrl(settings?.logo);
     const displayLogo = logoUrl || 'assets/icons/icon.png';
-    const logoHtml = `<img src="${displayLogo}" onerror="this.src='assets/icons/icon.png';" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px;">`;
+    const logoHtml = `<img src="${displayLogo}" crossorigin="anonymous" onerror="this.removeAttribute('crossorigin'); this.src='assets/icons/icon.png';" style="width: 100px; height: 100px; object-fit: contain; margin-bottom: 20px;">`;
 
     if (!overlay) {
       overlay = document.createElement('div');
@@ -5411,7 +5410,7 @@ async function uploadImage(base64Data, path) {
       overlay.innerHTML = `
         ${deviceLabel}
         <div class="marketing-side animate-panel-left" style="flex: 1.2; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; padding: 0; border-right: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); overflow: hidden;">
-          <img src="assets/icons/market.png" style="width: 100%; height: 100%; object-fit: cover;">
+          <img src="assets/icons/market.png" crossorigin="anonymous" style="width: 100%; height: 100%; object-fit: cover;">
         </div>
         <div class="login-side animate-panel-right" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px;">
           <div style="margin-bottom: 20px; opacity: 0.8; transform: scale(0.8);">${logoHtml}</div>
@@ -6565,7 +6564,7 @@ Object.assign(window, {
   printReceipt, connectUSBScanner, connectBluetoothScanner,
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
   directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction, handleChangePassword,
-  reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff, editStaff, toggleStaffStatus,
+  reopenTransaction, downloadReportPDF, renderReport, populateReportFilters, saveSettings, addStaff, deleteStaff, editStaff, toggleStaffStatus,
   openStaffPermissionsModal, saveStaffPermissions,
   resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
   toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme, exportReportToCSV,

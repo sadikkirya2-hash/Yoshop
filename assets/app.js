@@ -238,7 +238,7 @@ const analytics = getAnalytics(app);
             };
 
             item.innerHTML = `
-              <img src="${dish.image}" alt="">
+              <img src="${dish.image}" crossorigin="anonymous" alt="">
               <div class="menu-item-body">
                 <div class="menu-item-header">
                   <h4>${dish.name}</h4>
@@ -968,7 +968,7 @@ const analytics = getAnalytics(app);
       const sellingPrice = dish.price || 0;
       const profitValue = sellingPrice - costPrice;
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td><img src="${dish.image}" alt=""></td>
+      tr.innerHTML = `<td><img src="${dish.image}" crossorigin="anonymous" alt=""></td>
         <td>${dish.name}</td> 
         <td style="text-align: right; white-space: nowrap;"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(costPrice)}</td>
         <td style="text-align: right; white-space: nowrap;"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(sellingPrice)}</td>
@@ -1556,8 +1556,7 @@ const analytics = getAnalytics(app);
         ? `<div class="summary-line"><span>Tax (${settings.taxRate}%)</span> <span><span class="currency-symbol">${currencySymbol}</span>${formatCurrency(displayTax)}</span></div>` 
         : '';
       
-      const logoUrl = sanitizeLogoUrl(settings.logo);
-      const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon-192x192.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
+      const logoHtml = logoUrl ? `<img src="${logoUrl}" crossorigin="anonymous" onerror="this.removeAttribute('crossorigin'); this.src='assets/icons/icon-192x192.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
 
       const receiptHtml = `
         <div class="receipt-header">
@@ -3505,7 +3504,7 @@ Object.assign(window, {
   handleServerChange, printReceipt, connectUSBScanner, connectBluetoothScanner,
   connectUSBPrinter, connectBluetoothPrinter, disconnectPrinter, testPrint,
   directPrint, renderTransactions, downloadBillAsPDF, deleteTransaction,
-  reopenTransaction, downloadReportPDF, saveSettings, addStaff, deleteStaff,
+  reopenTransaction, downloadReportPDF, renderReport, populateReportFilters, saveSettings, addStaff, deleteStaff,
   resetApp, addCategory, editCategory, deleteCategory, addUnit, deleteUnit,
   toggleAddCustomerForm, addCustomer, editCustomer, deleteCustomer, toggleTheme,
   renderStockListTable, editStockItem, toggleStockAdjustmentForm,
