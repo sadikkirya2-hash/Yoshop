@@ -852,7 +852,7 @@ async function uploadImage(base64Data, path) {
     transactions.unshift(transaction);
     
     // Keep local list at reasonable size for performance
-    if (transactions.length > 500) transactions.pop();
+    if (transactions.length > 1000) transactions.pop();
     
     // 2. Save locally to IndexedDB
     await saveState('transactions', transactions);
@@ -925,7 +925,29 @@ async function uploadImage(base64Data, path) {
       });
 
       if (cloudTransactions.length > 0) {
-        transactions = cloudTransactions;
+        // Merge cloud results with existing local transactions to build a complete local archive
+        // We use the date ISO string as a unique identifier for deduplication
+        const existingTxMap = new Map();
+        
+        // 1. Add current local transactions (preserving unsynced ones)
+        if (Array.isArray(transactions)) {
+            transactions.forEach(t => {
+                if (t && t.date) existingTxMap.set(t.date, t);
+            });
+        }
+
+        // 2. Overwrite/add with cloud transactions (marking them as synced)
+        cloudTransactions.forEach(t => {
+            if (t && t.date) {
+                existingTxMap.set(t.date, { ...t, synced: true });
+            }
+        });
+
+        // 3. Convert back to array and sort by date descending
+        transactions = Array.from(existingTxMap.values())
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 1000); // Keep a healthy local archive for offline reports
+
         saveState('transactions', transactions);
         renderTransactions();
         updateDashboard();
@@ -2994,7 +3016,8 @@ async function uploadImage(base64Data, path) {
 
     // Strict cache-buster and CORS handling for the logo
     let logoUrl = sanitizeLogoUrl(settings.logo);
-    if (logoUrl && logoUrl.startsWith('http')) {
+    // Only add cache-buster if online to avoid breaking offline reports if URL is in cache
+    if (logoUrl && logoUrl.startsWith('http') && navigator.onLine) {
         logoUrl += (logoUrl.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
     }
 
