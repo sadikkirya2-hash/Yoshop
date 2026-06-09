@@ -1457,9 +1457,15 @@ async function uploadImage(base64Data, path) {
               if (e.target.closest('.item-controls')) return;
               addToOrder(CART_ID, dish.name);
             };
+            
+            // Add cache-buster to ensure the browser fetches a fresh version with CORS headers
+            let displayImage = dish.image || "https://placehold.co/100";
+            if (displayImage.startsWith('http') && navigator.onLine) {
+              displayImage += (displayImage.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+            }
 
             item.innerHTML = `
-              <img src="${dish.image}" crossorigin="anonymous" alt="">
+              <img src="${displayImage}" crossorigin="anonymous" alt="" onerror="this.removeAttribute('crossorigin'); this.src='https://placehold.co/100';">
               <div class="menu-item-body">
                 <div class="menu-item-header">
                   <h4>${dish.name}</h4>
@@ -2265,8 +2271,15 @@ async function uploadImage(base64Data, path) {
       const costPrice = calculateDishCost(dish);
       const sellingPrice = dish.price || 0;
       const profitValue = sellingPrice - costPrice;
+
+      // Add cache-buster for consistency in the products table
+      let displayImage = dish.image || "https://placehold.co/100";
+      if (displayImage.startsWith('http') && navigator.onLine) {
+        displayImage += (displayImage.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+      }
+
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td><img src="${dish.image}" crossorigin="anonymous" alt=""></td>
+      tr.innerHTML = `<td><img src="${displayImage}" crossorigin="anonymous" alt="" onerror="this.removeAttribute('crossorigin'); this.src='https://placehold.co/100';"></td>
         <td>${dish.name}</td> 
         <td class="u-text-right u-nowrap"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(costPrice)}</td>
         <td class="u-text-right u-nowrap"><span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(sellingPrice)}</td>
@@ -2867,7 +2880,13 @@ async function uploadImage(base64Data, path) {
         ? `<div class="summary-line"><span>Tax (${settings.taxRate}%)</span> <span><span class="currency-symbol">${currencySymbol}</span>${formatCurrency(displayTax)}</span></div>` 
         : '';
       
-      const logoHtml = logoUrl ? `<img src="${logoUrl}" crossorigin="anonymous" onerror="this.removeAttribute('crossorigin'); this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
+      // Add cache-buster for robust CORS handling in receipts
+      let finalLogoUrl = logoUrl;
+      if (finalLogoUrl && finalLogoUrl.startsWith('http') && navigator.onLine) {
+          finalLogoUrl += (finalLogoUrl.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+      }
+
+      const logoHtml = finalLogoUrl ? `<img src="${finalLogoUrl}" crossorigin="anonymous" onerror="this.removeAttribute('crossorigin'); this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
 
       const receiptHtml = `
         <div class="receipt-header">
