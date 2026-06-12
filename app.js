@@ -5212,7 +5212,7 @@ async function uploadImage(base64Data, path) {
     try {
       const response = await fetch('./sw.js');
       const text = await response.text();
-      const match = text.match(/CACHE_NAME\s*=\s*['"]yobill-(v\d+)['"]/);
+      const match = text.match(/CACHE_NAME\s*=\s*['"]yoshop-(v\d+)['"]/);
       if (match) displayEl.textContent = match[1].toUpperCase();
     } catch (e) {
       displayEl.textContent = '1.5.0'; // Fallback
@@ -5896,7 +5896,7 @@ async function uploadImage(base64Data, path) {
         
         // Check if there's already a waiting worker (update ready but not activated)
         if (registration.waiting) {
-          triggerAppUpdate(false);
+          showUpdateNotification();
         }
 
         // Listen for new updates
@@ -5904,7 +5904,7 @@ async function uploadImage(base64Data, path) {
           const newWorker = registration.installing;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              triggerAppUpdate(false);
+              showUpdateNotification();
             }
           });
         });
