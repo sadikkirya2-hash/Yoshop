@@ -5566,6 +5566,10 @@ async function uploadImage(base64Data, path) {
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
               <button onclick="prepareLogin('admin')" class="btn" style="background: rgba(255,255,255,0.15); border: 1px solid white; color: white; padding: 15px; font-weight: bold; width: 100%; border-radius: 8px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px;">🛡️ Login as Admin</button>
               <button onclick="prepareLogin('staff')" class="btn" style="background: rgba(255,255,255,0.15); border: 1px solid white; color: white; padding: 15px; font-weight: bold; width: 100%; border-radius: 8px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px;">👥 Login as Staff</button>
+              <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 12px; font-weight: bold; width: 100%; border-radius: 8px; margin: 10px 0 0 0; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 16px; height: 16px;">
+                Logout Google Account
+              </button>
             </div>
           </div>
         `;
@@ -5594,8 +5598,12 @@ async function uploadImage(base64Data, path) {
             <div id="pin-actions-container" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
               <button onclick="loginWithPIN()" class="btn" style="background: #28a745; color: white; padding: 15px; font-weight: bold; width: 100%; margin: 0; border-radius: 8px; font-size: 1.1em;">Unlock System</button>
               <button onclick="resetLoginStage()" class="btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 12px; font-weight: bold; width: 100%; border-radius: 8px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px;">🔙 Switch Account Type</button>
-              <div style="display: flex; justify-content: space-between; margin-top: 15px; width: 100%;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; width: 100%; gap: 10px;">
                   <a href="#" onclick="forgotPIN()" style="color: white; font-size: 0.85em; text-decoration: underline; opacity: 0.8;">Forgot PIN?</a>
+                  <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 5px 12px; font-size: 0.8em; margin: 0; cursor: pointer; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 14px; height: 14px;">
+                    Logout Google Account
+                  </button>
               </div>
             </div>
           </div>
@@ -5612,7 +5620,6 @@ async function uploadImage(base64Data, path) {
 
         ${pinStageHtml}
 
-        <button onclick="logout()" class="btn" style="background: transparent; color: white; border: 1px solid white; padding: 10px; font-size: 0.9em; margin-top: 40px; margin-bottom: 60px; cursor: pointer; border-radius: 8px;">Logout from Google Account</button>
         <div style="position: absolute; bottom: 20px; font-size: 0.65em; opacity: 0.7; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
           <div style="display: flex; gap: 20px; font-size: 1.2em; margin-bottom: 2px;">
             <a href="#" style="color: white; text-decoration: none;">Privacy Policy</a>
