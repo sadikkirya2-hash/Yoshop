@@ -5546,12 +5546,14 @@ async function uploadImage(base64Data, path) {
       overlay.style.justifyContent = 'center';
 
       const subInfo = getSubscriptionInfo();
-      const promoMsgHtml = (subInfo.label === "PROMO PLAN") ? `<span style="margin-left: 8px; color: #28a745; font-size: 0.8em; font-weight: bold;">🎉 Enjoy your promo plan!</span>` : '';
+      const promoEmoji = (subInfo.label === "PROMO PLAN") ? ' 🎉' : '';
+      const promoMsgHtml = (subInfo.label === "PROMO PLAN") ? `<div style="margin-top: 5px; color: #28a745; font-size: 0.8em; font-weight: bold;">Enjoy your promo plan!</div>` : '';
 
       const statusDisplay = `
         <div style="background: rgba(255,255,255,0.1); padding: 8px 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ${subInfo.color}; text-align: left; width: 100%; max-width: 300px;">
-          <span style="font-size: 0.7em; opacity: 0.8; text-transform: uppercase;">Shop Status:</span><br>
-          <strong style="color: ${subInfo.color}; font-size: 0.9em;">${subInfo.label}</strong>${promoMsgHtml}
+          <span style="font-size: 0.7em; opacity: 0.8; text-transform: uppercase;">Shop Status:</span>
+          <strong style="color: ${subInfo.color}; font-size: 0.9em; margin-left: 5px;">${subInfo.label}${promoEmoji}</strong>
+          ${promoMsgHtml}
           ${subInfo.subExpires ? `<div style="font-size: 0.7em; opacity: 0.7;">Valid until: ${subInfo.subExpires.toLocaleDateString()}</div>` : ''}
         </div>`;
 
@@ -5561,7 +5563,6 @@ async function uploadImage(base64Data, path) {
       if (loginSubStage === 'choice') {
         pinStageHtml = `
           <div style="width: 100%; max-width: 300px; display: flex; flex-direction: column; align-items: center;">
-            <h2 style="margin-bottom: 25px;">Login as</h2>
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
               <button onclick="prepareLogin('admin')" class="btn" style="background: rgba(255,255,255,0.15); border: 1px solid white; color: white; padding: 15px; font-weight: bold; width: 100%; border-radius: 8px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px;">🛡️ Login as Admin</button>
               <button onclick="prepareLogin('staff')" class="btn" style="background: rgba(255,255,255,0.15); border: 1px solid white; color: white; padding: 15px; font-weight: bold; width: 100%; border-radius: 8px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px;">👥 Login as Staff</button>
