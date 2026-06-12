@@ -1,20 +1,37 @@
 {
-  "name": "YoShop - POS & Management",
+  "name": "YoShop",
   "short_name": "YoShop",
-  "description": "A comprehensive Point of Sale and Shop Management System.",
-  "start_url": "/index.html",
+  "description": "YoShop POS System",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#2196f3",
+  "theme_color": "#f82c33",
   "icons": [
     {
-      "src": "assets/icons/icon-192x192.png",
+      "src": "assets/icons/android192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/android512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/ios192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "assets/icons/icon-512x512.png",
+      "src": "assets/icons/ios512.png",
       "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icons/wind400.png",
+      "sizes": "400x400",
       "type": "image/png"
     }
   ]
