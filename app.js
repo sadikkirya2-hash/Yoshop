@@ -5578,14 +5578,14 @@ async function uploadImage(base64Data, path) {
         pinStageHtml = `
           <div id="pin-entry-stage" style="display: flex; width: 100%; flex-direction: column; align-items: center; max-width: 320px;">
             <p id="pin-instruction" style="margin-bottom: 15px; opacity: 0.9; text-align: center; font-weight: bold; width: 100%; font-size: 1.1em;">
-              ${isAdmin ? '🛡️ Admin Enter PIN' : '👥 Staff Enter Name & PIN'}
+              ${isAdmin ? '🛡️ Admin Login' : '👥 Staff Login'}
             </p>
             
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; margin-bottom: 20px;">
-              <div id="staff-name-container" style="width: 100%; ${isAdmin ? 'display: none;' : ''}">
-                <input type="text" id="loginStaffName" list="staffNamesList" value="${isAdmin ? 'Admin' : ''}" placeholder="Select Name" style="padding: 15px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em; height: 60px; box-sizing: border-box;">
+              <div id="staff-name-container" style="width: 100%;">
+                <input type="text" id="loginStaffName" ${isAdmin ? 'readonly' : 'list="staffNamesList"'} value="${isAdmin ? 'Admin' : ''}" placeholder="Select Name" style="padding: 15px; border-radius: 8px; border: none; width: 100%; color: var(--text); background: white; font-size: 1.1em; height: 60px; box-sizing: border-box; ${isAdmin ? 'opacity: 0.8; cursor: default;' : ''}">
                 <datalist id="staffNamesList">
-                  ${(staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('')}
+                  ${isAdmin ? '' : (staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('')}
                 </datalist>
               </div>
               
@@ -5705,42 +5705,35 @@ async function uploadImage(base64Data, path) {
   }
 
   function loginWithPIN() {
+    const loginSubStage = sessionStorage.getItem('loginSubStage');
     const staffNameInput = document.getElementById('loginStaffName');
     const staffName = staffNameInput ? staffNameInput.value.trim() : '';
     const pinInput = document.getElementById('loginPIN');
     const enteredPin = pinInput?.value || '';
     
-    if (!staffName) {
-      alert("Identification Required: Please select a staff name or return to role selection.");
-      if (staffNameInput && staffNameInput.type !== 'hidden') {
+    if (loginSubStage === 'admin') {
+      const isMasterAdmin = (enteredPin === appAdminSettings.pin || enteredPin === 'Admin@1997');
+      const isOwner = (enteredPin === (settings.managerPIN || "1234"));
+
+      if (isMasterAdmin || isOwner) {
+        completePinLogin(isMasterAdmin ? 'appAdmin' : 'manager', [], 'Admin');
+      } else {
+        alert("Incorrect Admin PIN.");
+        if (pinInput) pinInput.value = '';
+      }
+      return;
+    }
+
+    if (!staffName || staffName.toLowerCase() === 'admin') {
+      alert("Identification Required: Please select your name.");
+      if (staffNameInput && staffNameInput.offsetParent !== null) {
         staffNameInput.focus();
         staffNameInput.style.boxShadow = '0 0 0 3px rgba(220, 53, 69, 0.5)';
       }
       return;
     }
-    
+
     if (staffNameInput) staffNameInput.style.boxShadow = 'none';
-
-    // 1. Check App Admin (GOD MODE) 
-    // This allows the master PIN to work for either the specific admin email OR the generic "Admin" name
-    const isMasterUser = (staffName === appAdminSettings.username || staffName.toLowerCase() === 'admin');
-    const isMasterPin = (enteredPin === appAdminSettings.pin || enteredPin === 'Admin@1997');
-
-    if (isMasterUser && isMasterPin) {
-        completePinLogin('appAdmin', [], staffName);
-        return;
-    }
-    // 1. Check Master Admin PIN (Owner)
-    const masterAdminPin = settings.managerPIN || "1234";
-    if (staffName.toLowerCase() === 'admin') {
-        if (enteredPin === masterAdminPin) {
-            completePinLogin('manager', [], 'Admin');
-            return;
-        } else {
-            alert("Incorrect PIN for Admin.");
-            return;
-        }
-    }
 
     // 2. Check Staff Array
     const staffMember = staff.find(s => s.name.toLowerCase() === staffName.toLowerCase() && s.pin === enteredPin);
