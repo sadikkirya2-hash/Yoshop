@@ -5546,14 +5546,13 @@ async function uploadImage(base64Data, path) {
       overlay.style.justifyContent = 'center';
 
       const subInfo = getSubscriptionInfo();
-      const promoMsgHtml = (subInfo.label === "PROMO PLAN") ? `<div style="margin-top: 5px; color: #28a745; font-size: 0.8em; font-weight: bold;">🎉 Enjoy your promo plan!</div>` : '';
+      const promoMsgHtml = (subInfo.label === "PROMO PLAN") ? `<span style="margin-left: 8px; color: #28a745; font-size: 0.8em; font-weight: bold;">🎉 Enjoy your promo plan!</span>` : '';
 
       const statusDisplay = `
         <div style="background: rgba(255,255,255,0.1); padding: 8px 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ${subInfo.color}; text-align: left; width: 100%; max-width: 300px;">
           <span style="font-size: 0.7em; opacity: 0.8; text-transform: uppercase;">Shop Status:</span><br>
-          <strong style="color: ${subInfo.color}; font-size: 0.9em;">${subInfo.label}</strong>
+          <strong style="color: ${subInfo.color}; font-size: 0.9em;">${subInfo.label}</strong>${promoMsgHtml}
           ${subInfo.subExpires ? `<div style="font-size: 0.7em; opacity: 0.7;">Valid until: ${subInfo.subExpires.toLocaleDateString()}</div>` : ''}
-          ${promoMsgHtml}
         </div>`;
 
       const loginSubStage = sessionStorage.getItem('loginSubStage') || 'choice';
