@@ -1,12 +1,11 @@
 {
-  "name": "Yobill",
-  "short_name": "Yobill",
-  "lang": "en",
-  "start_url": "/",
-  "scope": "/",
+  "name": "YoShop - POS & Management",
+  "short_name": "YoShop",
+  "description": "A comprehensive Point of Sale and Shop Management System.",
+  "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#2196f3",
   "icons": [
     {
       "src": "assets/icons/icon-192x192.png",
@@ -18,6 +17,5 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ],
-  "description": "Mobile POS Application"
+  ]
 }
