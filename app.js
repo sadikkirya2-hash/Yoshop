@@ -2448,6 +2448,18 @@ function getEffectiveUid() {
     }
   });
 
+  /**
+   * Helper to generate a Barcode DataURL for receipts using JsBarcode
+   */
+  function getBarcodeDataUrl(code) {
+    if (typeof JsBarcode === 'undefined') return '';
+    const canvas = document.createElement('canvas');
+    try {
+      JsBarcode(canvas, code, { format: "CODE128", width: 2, height: 40, displayValue: false, margin: 0 });
+      return canvas.toDataURL("image/png");
+    } catch (e) { return ''; }
+  }
+
   function printReceipt() {
     // If a device is connected, the user might want to use that instead.
     if (printerDevice) {
@@ -2480,6 +2492,9 @@ function getEffectiveUid() {
     const currencySymbol = settings.currency || '$';
     const logoUrl = sanitizeLogoUrl(settings.logo);
     const logoHtml = logoUrl ? `<img src="${logoUrl}" onerror="this.src='assets/icons/icon.png';" style="width:50px; height:50px; object-fit:contain;">` : '🧾';
+    const barcodeImgUrl = getBarcodeDataUrl(transactionId.toString());
+    const barcodeHtml = barcodeImgUrl ? `<div style="text-align:center; margin: 15px 0;"><img src="${barcodeImgUrl}" style="width: 80%; max-height: 50px;"></div>` : '';
+
     const itemsHtml = items.map(o => {
       const notesHtml = o.notes ? `<br><small style="font-style: italic;">- ${o.notes}</small>` : '';
       return `<div class="item-row"><div class="col-name">${o.name} ${notesHtml}</div><div class="col-qty">${o.qty}x</div><div class="col-price">${currencySymbol}${formatCurrency(o.price)}</div><div class="col-total">${currencySymbol}${formatCurrency(o.qty * o.price)}</div></div>`;
@@ -2503,10 +2518,10 @@ function getEffectiveUid() {
       <div class="receipt-summary">
         <div class="summary-line total"><span>TOTAL</span> <span>${currencySymbol}${formatCurrency(total)}</span></div>
       </div>
-      <div class="receipt-footer"><p>Thank you for your visit!</p><p class="promo">Get 10% off on your next visit!</p></div>`;
+      <div class="receipt-footer"><p>THANK YOU FOR YOUR PATRONAGE!</p>${barcodeHtml}<p class="promo">Get 10% off on your next visit!</p><p style="font-size:0.7em; margin-top:10px; opacity:0.6;">Power by YoShop POS</p></div>`;
 
     const printWindow = window.open('', 'Print Receipt', 'width=420,height=600,scrollbars=yes');
-    const printHtml = `<html><head><title>Print Receipt</title><style>body { margin: 0; padding: 10px; background: #f0f0f0; } .receipt-paper { font-family: 'Courier New', Courier, monospace; background: #fff; color: #000; padding: 15px; border: 1px solid #ccc; max-width: 400px; margin: auto; } .receipt-header { text-align: center; margin-bottom: 15px; } .receipt-header .logo { font-size: 40px; margin-bottom: 5px; } .receipt-header h3 { margin: 0; font-size: 1.2em; } .receipt-header p { margin: 2px 0; font-size: 0.8em; } .receipt-details { font-size: 0.8em; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin-bottom: 10px; } .receipt-details div { display: flex; justify-content: space-between; } .receipt-items .table-header { display: flex; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 5px; font-size: 0.8em; } .receipt-items .item-row { display: flex; margin-bottom: 3px; font-size: 0.8em; } .receipt-items .col-name { width: 50%; } .receipt-items .col-qty { width: 10%; text-align: left; } .receipt-items .col-price { width: 20%; text-align: right; } .receipt-items .col-total { width: 20%; text-align: right; } .receipt-summary { border-top: 1px dashed #000; padding-top: 10px; margin-top: 15px; font-size: 0.9em; } .summary-line { display: flex; justify-content: space-between; margin-bottom: 5px; } .summary-line.total { font-weight: bold; font-size: 1.1em; } .receipt-footer { text-align: center; margin-top: 20px; font-size: 0.8em; } .receipt-footer .promo { margin-top: 10px; font-weight: bold; }</style></head><body><div class="receipt-paper">${receiptHtml}</div></body></html>`;
+    const printHtml = `<html><head><title>Print Receipt</title><style>body { margin: 0; padding: 10px; background: #f0f0f0; } .receipt-paper { font-family: 'Courier New', Courier, monospace; background: #fff; color: #000; padding: 30px 20px; max-width: 400px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); } .receipt-header { text-align: center; margin-bottom: 15px; } .receipt-header h2 { margin: 0; font-size: 1.4em; text-transform: uppercase; } .receipt-header p { margin: 2px 0; font-size: 0.8em; } .receipt-details { font-size: 0.8em; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 15px 0; } .receipt-details div { display: flex; justify-content: space-between; } .receipt-items .table-header { display: flex; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 8px; font-size: 0.8em; } .receipt-items .item-row { display: flex; margin-bottom: 5px; font-size: 0.8em; } .receipt-items .col-name { width: 50%; } .receipt-items .col-qty { width: 10%; text-align: left; } .receipt-items .col-price { width: 20%; text-align: right; } .receipt-items .col-total { width: 20%; text-align: right; } .receipt-summary { border-top: 1px dashed #000; padding-top: 10px; margin-top: 15px; font-size: 0.9em; } .summary-line { display: flex; justify-content: space-between; margin-bottom: 5px; } .summary-line.total { font-weight: bold; font-size: 1.4em; border-top: 1px double #000; padding-top: 5px; } .receipt-footer { text-align: center; margin-top: 25px; font-size: 0.8em; } .receipt-footer .promo { margin-top: 15px; font-weight: bold; border: 1px dashed #000; padding: 5px; display: inline-block; }</style></head><body><div class="receipt-paper">${receiptHtml}</div></body></html>`;
     printWindow.document.write(printHtml);
     printWindow.document.close();
     printWindow.focus(); // Focus on the new window
@@ -2875,6 +2890,9 @@ function getEffectiveUid() {
       const displayTax = tax !== undefined ? tax : 0;
       let logoUrl = sanitizeLogoUrl(settings.logo);
 
+      const barcodeImgUrl = getBarcodeDataUrl(transactionId.toString());
+      const barcodeHtml = barcodeImgUrl ? `<div style="text-align:center; margin: 20px 0;"><img src="${barcodeImgUrl}" style="width: 85%; max-height: 60px;"></div>` : '';
+
       const itemsHtml = items.map(o => {
         const notesHtml = o.notes ? `<br><small style="font-style: italic;">- ${o.notes}</small>` : '';
         return `
@@ -2925,7 +2943,7 @@ function getEffectiveUid() {
           ${discountHtml}
           <div class="summary-line total"><span>TOTAL</span> <span><span class="currency-symbol">${currencySymbol}</span>${formatCurrency(total)}</span></div>
         </div>
-        <div class="receipt-footer"><p>Thank you for your visit!</p><p class="promo">Get 10% off on your next visit!</p></div>`;
+        <div class="receipt-footer"><p style="font-weight: bold; margin-bottom: 10px;">THANK YOU FOR YOUR PATRONAGE!</p>${barcodeHtml}<p class="promo">Get 10% off on your next visit!</p><p style="font-size:0.75em; margin-top:15px; opacity:0.5;">Power by YoShop POS</p></div>`;
       document.getElementById('receiptContent').innerHTML = receiptHtml;
   }
 
