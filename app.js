@@ -84,6 +84,16 @@ async function uploadImage(base64Data, path) {
   }
 }
 
+/**
+ * Returns the UID of the account currently being viewed/operated on.
+ * This handles the context switch during Admin Monitoring mode.
+ */
+function getEffectiveUid() {
+  if (isMonitoringMode && userMetadata && userMetadata.uid) return userMetadata.uid;
+  if (currentUser) return currentUser.uid;
+  return null;
+}
+
 // ===== IndexedDB Setup =====
   let db;
   const DB_VERSION = 1;
@@ -595,13 +605,14 @@ async function uploadImage(base64Data, path) {
     
     isMonitoringMode = true;
 
-    // Stop listening to current sync
+    // 1. Stop current listeners and CLEAR local state to prevent data mixing between shops
     if (unsubscribeSync) unsubscribeSync();
+    menu = []; activeOrders = {}; transactions = []; staff = []; dishCategories = []; customers = []; units = []; restockHistory = [];
     
-    // Update local metadata to match the shop we are monitoring
+    // 2. Fetch and update local metadata to match the shop we are monitoring
     getDoc(doc(dbFirestore, "users", shopUid)).then(userSnap => {
       if (userSnap.exists()) {
-        userMetadata = userSnap.data();
+        userMetadata = { ...userSnap.data(), uid: shopUid };
         updateAuthUI(currentUser);
       }
     });
@@ -770,7 +781,8 @@ async function uploadImage(base64Data, path) {
       ]);
 
       // Debounce cloud sync to prevent excessive Firebase writes
-      if (syncToCloud && currentUser && isInitialLoadComplete && dbFirestore) {
+      const effectiveUid = getEffectiveUid();
+      if (syncToCloud && effectiveUid && isInitialLoadComplete && dbFirestore) {
         // Clear existing debounce timer
         if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
         
@@ -809,7 +821,7 @@ async function uploadImage(base64Data, path) {
             }
 
             // Perform actual cloud sync using merge to avoid overwriting other fields
-            await setDoc(doc(dbFirestore, "users", currentUser.uid, "data", "SHOP_DATA"), shopData, { merge: true });
+            await setDoc(doc(dbFirestore, "users", effectiveUid, "data", "SHOP_DATA"), shopData, { merge: true });
             lastSyncTime = Date.now();
             syncFailureCount = 0; // Reset on success
 
@@ -828,7 +840,7 @@ async function uploadImage(base64Data, path) {
             console.log('[SYNC] ✅ Cloud data synced successfully');
           } catch (firestoreError) {
             syncFailureCount++;
-            handleFirebaseError(firestoreError, "Firestore Sync", `users/${currentUser.uid}/data/SHOP_DATA`);
+            handleFirebaseError(firestoreError, "Firestore Sync", `users/${effectiveUid}/data/SHOP_DATA`);
           } finally {
             isDebouncing = false;
           }
@@ -858,9 +870,10 @@ async function uploadImage(base64Data, path) {
     await saveState('transactions', transactions);
 
     // 3. Save to Cloud Sub-collection if online
-    if (currentUser && dbFirestore && navigator.onLine) {
+    const effectiveUid = getEffectiveUid();
+    if (effectiveUid && dbFirestore && navigator.onLine) {
       try {
-        const txRef = collection(dbFirestore, "users", currentUser.uid, "transactions");
+        const txRef = collection(dbFirestore, "users", effectiveUid, "transactions");
         // Strip the local 'synced' flag before sending to Firestore
         const { synced, ...txData } = transaction;
         await addDoc(txRef, txData);
@@ -870,7 +883,7 @@ async function uploadImage(base64Data, path) {
         await saveState('transactions', transactions);
         console.log('[SYNC] Transaction saved to cloud collection');
       } catch (e) {
-        handleFirebaseError(e, "Cloud Transaction Record", `users/${currentUser.uid}/transactions`);
+        handleFirebaseError(e, "Cloud Transaction Record", `users/${effectiveUid}/transactions`);
       }
     }
   }
@@ -879,14 +892,15 @@ async function uploadImage(base64Data, path) {
    * Pushes transactions created while offline to the cloud sub-collection
    */
   async function syncOfflineTransactions() {
-    if (!currentUser || !dbFirestore || !navigator.onLine) return;
+    const effectiveUid = getEffectiveUid();
+    if (!effectiveUid || !dbFirestore || !navigator.onLine) return;
     const unsynced = transactions.filter(t => !t.synced);
     if (unsynced.length === 0) return;
 
     console.log(`[SYNC] Found ${unsynced.length} offline transactions. Syncing...`);
     for (let tx of unsynced) {
       try {
-        const txRef = collection(dbFirestore, "users", currentUser.uid, "transactions");
+        const txRef = collection(dbFirestore, "users", effectiveUid, "transactions");
         const { synced, ...txData } = tx;
         await addDoc(txRef, txData);
         tx.synced = true; // Update reference in the 'transactions' array
@@ -913,7 +927,8 @@ async function uploadImage(base64Data, path) {
         if (endDate) constraints.push(where("date", "<=", endDate + "T23:59:59Z"));
         q = query(txRef, ...constraints);
       } else {
-        q = query(txRef, orderBy("date", "desc"), limit(200));
+        // Increased limit from 200 to 1000 to ensure "last week" sales appear in Dashboard and Reports for busy shops
+        q = query(txRef, orderBy("date", "desc"), limit(1000));
       }
 
       const snap = await getDocs(q);
@@ -2819,7 +2834,8 @@ async function uploadImage(base64Data, path) {
     const start = document.getElementById('transactionStartDate')?.value;
     const end = document.getElementById('transactionEndDate')?.value;
     if (!start && !end) return alert("Please select a date range.");
-    if (currentUser) await loadTransactionsFromCloud(currentUser.uid, start, end);
+    const effectiveUid = getEffectiveUid();
+    if (effectiveUid) await loadTransactionsFromCloud(effectiveUid, start, end);
   }
 
   async function downloadBillAsPDF(transactionIndex) {
@@ -2924,8 +2940,9 @@ async function uploadImage(base64Data, path) {
       transactions.splice(index, 1);
 
       // Delete from Cloud Sub-collection
-      if (currentUser && dbFirestore) {
-        const txRef = collection(dbFirestore, "users", currentUser.uid, "transactions");
+      const effectiveUid = getEffectiveUid();
+      if (effectiveUid && dbFirestore) {
+        const txRef = collection(dbFirestore, "users", effectiveUid, "transactions");
         const q = query(txRef, where("date", "==", txToDelete.date), where("total", "==", txToDelete.total));
         getDocs(q).then(snap => {
           snap.forEach(async (doc) => {
@@ -3139,7 +3156,7 @@ async function uploadImage(base64Data, path) {
           <h5>Collected by Payment Method</h5>
           <table id="reportTable">
             <thead>
-              <tr><th>Method</th><th class="u-text-right">Total Revenue</th><th class="u-text-right">% Share</th></tr>
+              <tr><th class="u-text-center">Method</th><th class="u-text-center">Total Revenue</th><th class="u-text-center">% Share</th></tr>
             </thead>
             <tbody>
               ${Object.entries(paymentMethods).map(([method, total]) => `
@@ -3291,14 +3308,14 @@ async function uploadImage(base64Data, path) {
         <table id="reportTable">
           <thead>
             <tr>
-              <th>S/N</th>
-              <th>ITEM</th>
-              <th class="u-text-right">STOCK</th>
-              <th class="u-text-right">SOLD</th>
-              <th class="u-text-right">B.P</th>
-              <th class="u-text-right">S.P</th>
-              <th class="u-text-right">T.P</th>
-              <th class="u-text-right">PROFIT</th>
+              <th class="u-text-center">S/N</th>
+              <th class="u-text-center">ITEM</th>
+              <th class="u-text-center">STOCK</th>
+              <th class="u-text-center">SOLD</th>
+              <th class="u-text-center">Buying Price</th>
+              <th class="u-text-center">Selling Price</th>
+              <th class="u-text-center">Total Price</th>
+              <th class="u-text-center">PROFIT</th>
             </tr>
           </thead>
           <tbody>${tableBody}</tbody>
@@ -3360,11 +3377,11 @@ async function uploadImage(base64Data, path) {
         <table id="reportTable">
           <thead>
             <tr>
-              <th>Category</th>
-              <th class="u-text-right">Units</th>
-              <th class="u-text-right">Revenue</th>
-              <th class="u-text-right">Profit</th>
-              <th class="u-text-right">Margin</th>
+              <th class="u-text-center">Category</th>
+              <th class="u-text-center">Units</th>
+              <th class="u-text-center">Revenue</th>
+              <th class="u-text-center">Profit</th>
+              <th class="u-text-center">Margin</th>
             </tr>
           </thead>
           <tbody>${tableBody}</tbody>

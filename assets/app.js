@@ -175,6 +175,10 @@ const analytics = getAnalytics(app);
         renderUnitList();
         break;
       case 'reportsTab':
+        const reportDateInput = document.getElementById('reportDate');
+        if (reportDateInput) {
+          reportDateInput.value = ''; // Clear the report date filter to show all-time sales by default
+        }
         populateReportFilters();
         renderReport();
         break;
@@ -586,6 +590,12 @@ const analytics = getAnalytics(app);
     if (!currentOrder || currentOrder.items.length === 0) {
       return alert("No active order to split.");
     }
+    // Ensure we have a server name linked to the order
+    const serverDropdown = document.getElementById('servedBy');
+    if (serverDropdown && serverDropdown.value) {
+        currentOrder.server = serverDropdown.value;
+    }
+
     document.getElementById('splitBillTableId').textContent = "Current Order";
 
     // Initialize split state from the current order
@@ -679,20 +689,32 @@ const analytics = getAnalytics(app);
       return alert("Please assign all items before processing payments.");
     }
 
-    const serverName = activeOrders[CART_ID].server || 'N/A';
+    const serverName = activeOrders[CART_ID]?.server || document.getElementById('servedBy')?.value || 'N/A';
     closeSplitBillModal();
 
     for (let i = 0; i < splitState.bills.length; i++) {
       const bill = splitState.bills[i];
-      const billTotal = calculateTransactionTotals(bill.items).total;
+      const billTotals = calculateTransactionTotals(bill.items);
 
       // Use a promise to wait for each payment to be confirmed
       const paymentConfirmed = await new Promise(resolve => {
-        document.getElementById('paymentTotalDue').textContent = formatCurrency(billTotal);
+        document.getElementById('paymentTotalDue').textContent = formatCurrency(billTotals.total);
         document.getElementById('paymentModal').style.display = 'flex';
         document.querySelector('#paymentModal h3').textContent = `Payment for Person ${i + 1} / ${splitState.bills.length}`;
         toggleCashPaymentFields();
         calculateChange();
+        
+        // Setup receipt preview data for this specific split bill
+        const previewBtn = document.querySelector('button[onclick="previewOrder()"]');
+        if (previewBtn) {
+            previewBtn.onclick = () => previewOrder({
+                date: new Date().toLocaleString(),
+                customerName: serverName,
+                tableNo: 'Shop',
+                items: [...bill.items],
+                ...billTotals
+            });
+        }
 
         document.getElementById('confirmPaymentBtn').onclick = () => resolve(true);
         document.querySelector('#paymentModal button[onclick*="Cancel"]').onclick = () => resolve(false);
@@ -700,7 +722,17 @@ const analytics = getAnalytics(app);
 
       if (paymentConfirmed) {
         const paymentMethod = document.getElementById('paymentMethod').value;
-        const transaction = { date: new Date().toISOString(), customerName: serverName, tableNo: 'Shop', items: bill.items, total: billTotal, paymentMethod: paymentMethod };
+        const transaction = { 
+          date: new Date().toISOString(), 
+          customerName: serverName, 
+          tableNo: 'Shop', 
+          items: bill.items, 
+          total: billTotals.total, 
+          subtotal: billTotals.subtotal,
+          tax: billTotals.tax,
+          paymentMethod: paymentMethod,
+          discount: { value: 0, type: 'fixed', amount: 0 }
+        };
         transactions.unshift(transaction);
         bill.items.forEach(item => deductStock(item.name, item.qty));
         document.getElementById('paymentModal').style.display = 'none';
@@ -716,6 +748,11 @@ const analytics = getAnalytics(app);
     saveData();
     renderMenu();
     updateDashboard();
+    renderTransactions();
+    if (document.getElementById('reportsTab').classList.contains('active')) {
+        renderReport();
+    }
+    document.getElementById('servedBy').value = '';
     alert(`All split payments processed successfully!`);
   }
 
@@ -746,6 +783,14 @@ const analytics = getAnalytics(app);
 
     updateOrders(cartId);
     renderMenu();
+  }
+
+  function handleServerChange() {
+    const server = document.getElementById('servedBy').value;
+    if (activeOrders[CART_ID]) {
+        activeOrders[CART_ID].server = server;
+    }
+    saveData();
   }
 
   function decreaseQty(cartId, name, id = null) {
@@ -872,11 +917,12 @@ const analytics = getAnalytics(app);
             deductStock(dish.name, orderItem.qty);
         }
     });
-    
+
+    const serverName = activeOrders[CART_ID]?.server || document.getElementById('servedBy')?.value || 'N/A';
 
     const transaction = {
       date: new Date().toISOString(),
-      customerName: 'N/A',
+      customerName: serverName,
       tableNo: 'Shop',
       items: [...currentOrder.items],
       total: finalTotal,
@@ -896,6 +942,12 @@ const analytics = getAnalytics(app);
     saveData();
     renderMenu();
     updateDashboard();
+    renderTransactions();
+    if (document.getElementById('reportsTab').classList.contains('active')) {
+        renderReport();
+    }
+    if (document.getElementById('servedBy')) document.getElementById('servedBy').value = '';
+    
     document.getElementById('paymentModal').style.display = 'none';
     alert(`Sale processed successfully!`);
   }
@@ -1042,9 +1094,10 @@ const analytics = getAnalytics(app);
         return alert("No active order to preview.");
       } else {
         const totals = calculateTransactionTotals(currentOrder.items);
+        const serverName = activeOrders[CART_ID]?.server || document.getElementById('servedBy')?.value || 'N/A';
         currentTransaction = {
           date: new Date().toLocaleString(),
-          customerName: 'N/A',
+          customerName: serverName,
           tableNo: 'Shop',
           items: [...currentOrder.items],
           total: totals.total,
@@ -1637,7 +1690,9 @@ const analytics = getAnalytics(app);
 
     let filteredTransactions = transactions.filter(t => {
       if (reportDate) {
-        const transactionDateStr = new Date(t.date).toISOString().split('T')[0];
+        // Use local date string (YYYY-MM-DD) to match reportDate input
+        const d = new Date(t.date);
+        const transactionDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         if (transactionDateStr !== reportDate) return false;
       }
       if (staffFilter && t.customerName !== staffFilter) return false;
@@ -1678,8 +1733,42 @@ const analytics = getAnalytics(app);
 
       const sortedItems = Object.entries(itemSales).sort(([,a],[,b]) => b.qty - a.qty);
 
-      const tableBody = sortedItems.map(([name, data]) => `<tr><td>${name}</td><td style="text-align: right;">${data.qty}</td><td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(data.total)}</td></tr>`).join('');
-      reportHtml = `<h4>Item Report</h4><table><thead><tr><th>Item</th><th style="text-align: right;">Quantity Sold</th><th style="text-align: right;">Total Revenue</th></tr></thead><tbody>${tableBody}</tbody></table>`;
+      const tableBody = sortedItems.map(([name, data], index) => {
+        const dish = menu.find(d => d.name === name);
+        const stock = dish ? calculateDishStock(dish, true) : 0;
+        const bp = dish ? (dish.costPrice || 0) : 0;
+        const sp = dish ? (dish.price || 0) : 0;
+        const tp = data.total;
+        const profit = (sp - bp) * data.qty;
+
+        return `<tr>
+          <td style="text-align: center;">${index + 1}</td>
+          <td>${name}</td>
+          <td style="text-align: center;">${Number(stock).toFixed(1)}</td>
+          <td style="text-align: center;">${data.qty}</td>
+          <td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(bp)}</td>
+          <td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(sp)}</td>
+          <td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(tp)}</td>
+          <td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(profit)}</td>
+        </tr>`;
+      }).join('');
+
+      reportHtml = `<h4>Item Report</h4>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: center;">S/N</th>
+              <th style="text-align: center;">ITEM</th>
+              <th style="text-align: center;">STOCK</th>
+              <th style="text-align: center;">SOLD</th>
+              <th style="text-align: center;">B.P</th>
+              <th style="text-align: center;">S.P</th>
+              <th style="text-align: center;">T.P</th>
+              <th style="text-align: center;">PROFIT</th>
+            </tr>
+          </thead>
+          <tbody>${tableBody}</tbody>
+        </table>`;
 
     } else if (reportType === 'categorySales') {
       const categorySales = filteredTransactions.flatMap(t => t.items).reduce((acc, item) => {
@@ -1694,7 +1783,7 @@ const analytics = getAnalytics(app);
       const sortedCategories = Object.entries(categorySales).sort(([,a],[,b]) => b.total - a.total);
       
       const tableBody = sortedCategories.map(([name, data]) => `<tr><td>${name}</td><td style="text-align: right;">${data.qty}</td><td style="text-align: right;"><span class="currency-symbol">$</span>${formatCurrency(data.total)}</td></tr>`).join('');
-      reportHtml = `<h4>Category Report</h4><table><thead><tr><th>Category</th><th style="text-align: right;">Quantity Sold</th><th style="text-align: right;">Total Revenue</th></tr></thead><tbody>${tableBody}</tbody></table>`;
+      reportHtml = `<h4>Category Report</h4><table><thead><tr><th style="text-align: center;">Category</th><th style="text-align: center;">Quantity Sold</th><th style="text-align: center;">Total Revenue</th></tr></thead><tbody>${tableBody}</tbody></table>`;
     }
 
     outputContainer.innerHTML = reportHtml;
