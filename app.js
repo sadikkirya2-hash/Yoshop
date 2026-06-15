@@ -798,6 +798,9 @@ function getEffectiveUid() {
           
           try {
             isDebouncing = true;
+            const statusEl = document.getElementById('connectivity-status');
+            if (statusEl) statusEl.style.opacity = '0.5'; // Dim to indicate sync in progress
+
             // Prepare data for Firestore
             // JSON.stringify/parse is used to strip any 'undefined' properties which Firestore forbids.
             const shopData = JSON.parse(JSON.stringify({
@@ -826,8 +829,8 @@ function getEffectiveUid() {
             syncFailureCount = 0; // Reset on success
 
             // Real-time pulse animation for visual feedback
-            const statusEl = document.getElementById('connectivity-status');
             if (statusEl) {
+                statusEl.style.opacity = '1';
                 statusEl.classList.add('sync-pulse');
                 setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
             }
@@ -1467,6 +1470,7 @@ function getEffectiveUid() {
             if (isOutOfStock) itemClasses += ' out-of-stock';
 
             item.className = itemClasses;
+            item.setAttribute('data-product-name', dish.name); // Added for surgical updates
             item.onclick = (e) => { // Allow adding item by clicking the card
               if (isOutOfStock) return alert("Item is out of stock.");
               if (e.target.closest('.item-controls')) return;
@@ -1499,9 +1503,46 @@ function getEffectiveUid() {
       container.appendChild(catDiv);
     });
 
-    updateOrders(CART_ID);
-    renderDishesTable();
-    saveData();
+    // Initial orders sync
+    const totals = calculateTransactionTotals(activeOrders[CART_ID]?.items || []);
+    document.getElementById('menuTotal').textContent = formatCurrency(totals.total);
+  }
+
+  /**
+   * Lightly updates the existing menu cards without re-rendering the whole grid.
+   * This prevents "shaking" and image reloads when adding/removing items from cart.
+   */
+  function updateMenuUI() {
+    const currentOrder = activeOrders[CART_ID] || { items: [] };
+    const cards = document.querySelectorAll('.menu-item[data-product-name]');
+    
+    cards.forEach(card => {
+      const name = card.getAttribute('data-product-name');
+      const dish = menu.find(d => d.name === name);
+      if (!dish) return;
+
+      const totalInCarts = Object.values(activeOrders)
+          .flatMap(order => order.items || [])
+          .filter(item => item.name === name)
+          .reduce((sum, item) => sum + item.qty, 0);
+
+      const quantity = currentOrder.items.find(o => o.name === name && !o.notes)?.qty || 0;
+      const totalStock = calculateDishStock(dish, true);
+      const availableStock = Math.max(0, totalStock - totalInCarts);
+      const isOutOfStock = availableStock <= 0;
+
+      card.classList.toggle('active', totalInCarts > 0);
+      card.classList.toggle('out-of-stock', isOutOfStock);
+
+      const stockEl = card.querySelector('.stock-status');
+      if (stockEl) {
+        stockEl.textContent = `Available: ${availableStock}`;
+        stockEl.className = `stock-status ${isOutOfStock ? 'out-of-stock' : 'in-stock'}`;
+      }
+
+      const qtyEl = card.querySelector('.qty-display');
+      if (qtyEl) qtyEl.textContent = quantity;
+    });
   }
 
   async function addDish(buttonElement) {
@@ -2019,7 +2060,7 @@ function getEffectiveUid() {
             // Add as a new line item with a unique ID
             activeOrders[cartId].items.push({ ...dish, qty: 1, notes: note, id: Date.now() });
             updateOrders(cartId);
-            renderMenu();
+            updateMenuUI();
         }
         return;
     }
@@ -2029,7 +2070,7 @@ function getEffectiveUid() {
     else activeOrders[cartId].items.push({ ...dish, qty: 1 });
 
     updateOrders(cartId);
-    renderMenu();
+    updateMenuUI(); // Surgically update the UI instead of full render
   }
 
   function decreaseQty(cartId, name, id = null) {
@@ -2045,7 +2086,7 @@ function getEffectiveUid() {
       if (itemIndex > -1) activeOrders[cartId].items.splice(itemIndex, 1);
     }
     updateOrders(cartId);
-    renderMenu();
+    updateMenuUI(); // Surgically update the UI instead of full render
   }
 
   // ===== Tables =====
@@ -5177,8 +5218,17 @@ function getEffectiveUid() {
               // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
               saveData(false); 
 
-              // Refresh the current UI view immediately
-              refreshCurrentView();
+              // Surgically update the UI if we're on the Shop tab to prevent "shaking"
+              const activeTab = document.querySelector('section.active');
+              if (activeTab && activeTab.id === 'menuTab') {
+                updateMenuUI();
+                // Update the menu total display
+                const totals = calculateTransactionTotals(activeOrders[CART_ID]?.items || []);
+                const menuTotalEl = document.getElementById('menuTotal');
+                if (menuTotalEl) menuTotalEl.textContent = formatCurrency(totals.total);
+              } else {
+                refreshCurrentView();
+              }
               updateDashboard();
               applyTheme();
 

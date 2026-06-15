@@ -206,6 +206,7 @@
             const isOutOfStock = stock <= 0;
 
             let itemClasses = 'menu-item';
+            item.setAttribute('data-product-name', dish.name); // Add data attribute for surgical updates
             if (quantity > 0) itemClasses += ' active';
             if (isOutOfStock) itemClasses += ' out-of-stock';
 
@@ -216,7 +217,7 @@
               addToOrder(CART_ID, dish.name);
             };
 
-            item.innerHTML = `
+            item.innerHTML = ` 
               <img src="${dish.image}" alt="">
               <div style="padding: 10px;">
                 <div class="menu-item-header">
@@ -233,12 +234,45 @@
             grid.appendChild(item);
           });
       catDiv.appendChild(grid);
-      container.appendChild(catDiv);
+      container.appendChild(catDiv); 
     });
 
     updateOrders(CART_ID);
     renderDishesTable();
     saveData();
+  }
+
+  /**
+   * Lightly updates the existing menu cards without re-rendering the whole grid.
+   * This prevents "shaking" and image reloads when adding/removing items from cart.
+   */
+  function updateMenuUI() {
+    const currentOrder = activeOrders[CART_ID] || { items: [] };
+    const cards = document.querySelectorAll('.menu-item[data-product-name]');
+    
+    cards.forEach(card => {
+      const name = card.getAttribute('data-product-name');
+      const dish = menu.find(d => d.name === name);
+      if (!dish) return;
+
+      const totalInCarts = Object.values(activeOrders)
+          .flatMap(order => order.items || [])
+          .filter(item => item.name === name)
+          .reduce((sum, item) => sum + item.qty, 0);
+
+      const quantity = currentOrder.items.find(o => o.name === name && !o.notes)?.qty || 0;
+      const totalStock = calculateDishStock(dish, true);
+      const availableStock = Math.max(0, totalStock - totalInCarts);
+      const isOutOfStock = availableStock <= 0;
+
+      card.classList.toggle('active', totalInCarts > 0);
+      card.classList.toggle('out-of-stock', isOutOfStock);
+
+      const stockEl = card.querySelector('.stock-status');
+      if (stockEl) stockEl.textContent = `Stock: ${availableStock}`;
+      const qtyEl = card.querySelector('.qty-display');
+      if (qtyEl) qtyEl.textContent = quantity;
+    });
   }
 
   async function addDish(buttonElement) {
@@ -714,8 +748,10 @@
         if (note !== null) { // prompt not cancelled
             // Add as a new line item with a unique ID
             activeOrders[cartId].items.push({ ...dish, qty: 1, notes: note, id: Date.now() });
-            updateOrders(cartId);
+            updateOrders(cartId); // This will call updateMenuUI()
             renderMenu();
+            updateOrders(cartId);
+            updateMenuUI();
         }
         return;
     }
@@ -725,7 +761,7 @@
     else activeOrders[cartId].items.push({ ...dish, qty: 1 });
 
     updateOrders(cartId);
-    renderMenu();
+    updateMenuUI(); // Call the surgical update
   }
 
   function decreaseQty(cartId, name, id = null) {
@@ -741,7 +777,7 @@
       if (itemIndex > -1) activeOrders[cartId].items.splice(itemIndex, 1);
     }
     updateOrders(cartId);
-    renderMenu();
+    updateMenuUI(); // Call the surgical update
   }
 
   // ===== Tables =====
@@ -874,7 +910,7 @@
 
     delete activeOrders[CART_ID]; // Clear the order for the table
     saveData();
-    renderMenu();
+    renderMenu(); // Full re-render needed after checkout to clear all quantities
     updateDashboard();
     document.getElementById('paymentModal').style.display = 'none';
     document.getElementById('servedBy').value = '';
@@ -3448,4 +3484,3 @@
       }
     }
   }
-
