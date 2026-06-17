@@ -597,6 +597,7 @@ function getEffectiveUid() {
             <button class="btn btn-info u-flex-1" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')" style="margin:0;">Monitor</button>
             ${userStatus === 'pending' ? `<button class="btn btn-success u-flex-1" onclick="updateTargetUserStatus('${uid}', 'active')" style="margin:0;">Approve</button>` : ''}
             <button class="btn btn-danger" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')" style="margin:0; flex: 0.5;">Delete</button>
+            <button class="btn btn-success" onclick="window.open('https://wa.me/${whatsappNum}', '_blank')" style="margin:0; flex: 0.5;" ${whatsappNum === 'N/A' ? 'disabled' : ''}>WhatsApp</button>
           </div>
           <div style="display:flex; gap:5px; margin-top:5px; align-items:center;">
             <input type="date" id="sub-date-${uid}" class="u-fs-08" style="flex:2; padding:3px; border-radius:4px; border:1px solid #ccc; background: white; color: black;">
@@ -708,6 +709,7 @@ function getEffectiveUid() {
               <button class="btn btn-info u-fs-08" style="padding:4px 8px; margin:0;" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')">Monitor</button>
               ${userStatus === 'pending' ? `<button class="btn btn-success u-fs-08" style="padding:4px 8px; margin:0;" onclick="updateTargetUserStatus('${uid}', 'active'); refreshAppAdminShopsTable();">Approve</button>` : ''}
               <button class="btn btn-danger u-fs-08" style="padding:4px 8px; margin:0;" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')">Delete</button>
+              <button class="btn btn-success u-fs-08" style="padding:4px 8px; margin:0;" onclick="window.open('https://wa.me/${whatsappNum}', '_blank')" ${whatsappNum === 'N/A' ? 'disabled' : ''}>WhatsApp</button>
             </div>
           </td>
         `;
@@ -1294,8 +1296,10 @@ function getEffectiveUid() {
 
     if (!email || !password) return alert("Please enter email and password.");
     if (nameInput && !name) return alert("Please enter your name.");
-    if (whatsappInput && !whatsapp) return alert("Please enter your WhatsApp number starting with country code.");
-    if (whatsapp && !whatsapp.startsWith('+')) return alert("WhatsApp number must start with a country code (e.g., +256).");
+    if (whatsappInput && !whatsapp) return alert("Please enter your WhatsApp number starting with a country code.");
+    if (whatsapp && !whatsapp.startsWith('+')) return alert("WhatsApp number must start with a country code (e.g., +256)."); //
+    const phoneNumber = whatsapp.substring(1); // Remove the '+'
+    if (phoneNumber.length < 7 || phoneNumber.length > 15) return alert("WhatsApp number (excluding country code) must be between 7 and 15 digits long.");
     if (confirmInput && password !== confirmPassword) return alert("Passwords do not match.");
     
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
