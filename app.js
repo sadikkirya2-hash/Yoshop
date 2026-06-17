@@ -270,6 +270,7 @@ function getEffectiveUid() {
                   <th>Shop Name</th>
                   <th>Owner Account</th>
                   <th>Contact</th>
+                  <th>WhatsApp</th>
                   <th class="u-text-center">Status</th>
                   <th>Subscription</th>
                   <th>Last Sync</th>
@@ -527,6 +528,7 @@ function getEffectiveUid() {
         const userData = userDoc.data();
         const userEmail = (userData.email || '').toLowerCase().trim();
         const userStatus = userData.status || 'active';
+        const whatsappNum = userData.whatsapp || 'N/A';
         const subExpires = userData.subscriptionExpires || null;
         
         // Robust email detection: sometimes the document ID itself is the email
@@ -586,6 +588,7 @@ function getEffectiveUid() {
           <div class="shop-card-details">
             <p class="u-fs-08" title="${accountEmail}"><strong>Owner Account:</strong> ${accountEmail}</p>
             <p class="u-fs-08"><strong>Contact:</strong> ${contactInfo}</p>
+            <p class="u-fs-08"><strong>WhatsApp:</strong> ${whatsappNum}</p>
             <p class="u-fs-08"><strong>Last Active:</strong> ${lastActive}</p>
             <p class="u-fs-08"><strong>Last Sync:</strong> ${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</p>
             ${subStatusHtml}
@@ -662,6 +665,7 @@ function getEffectiveUid() {
 
         const userData = userDoc.data();
         const userEmail = (userData.email || '').toLowerCase().trim();
+        const whatsappNum = userData.whatsapp || 'N/A';
         const effectiveEmail = (uid.includes('@') && !userEmail) ? uid.toLowerCase().trim() : userEmail;
 
         if (effectiveEmail && seenEmails.has(effectiveEmail)) continue;
@@ -695,6 +699,7 @@ function getEffectiveUid() {
           <td class="u-bold">${shopSettings.name || 'Unnamed Shop'}</td>
           <td class="u-fs-08">${effectiveEmail || 'No Email'}</td>
           <td class="u-fs-08">${shopSettings.contact || 'N/A'}</td>
+          <td class="u-fs-08">${whatsappNum}</td>
           <td class="u-text-center"><span class="shop-card-status ${statusClass}" style="padding: 2px 6px; font-size: 0.7em;">${statusLabel}</span></td>
           <td class="u-fs-08" style="${subStyle}">${subText}</td>
           <td class="u-fs-08">${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</td>
@@ -1278,15 +1283,19 @@ function getEffectiveUid() {
     const emailInput = document.getElementById('authEmail');
     const passwordInput = document.getElementById('authPassword');
     const nameInput = document.getElementById('authName');
+    const whatsappInput = document.getElementById('authWhatsApp');
     const confirmInput = document.getElementById('authConfirmPassword');
 
     const email = emailInput?.value?.trim();
     const password = passwordInput?.value?.trim();
     const name = nameInput?.value?.trim();
+    const whatsapp = whatsappInput?.value?.trim();
     const confirmPassword = confirmInput?.value?.trim();
 
     if (!email || !password) return alert("Please enter email and password.");
     if (nameInput && !name) return alert("Please enter your name.");
+    if (whatsappInput && !whatsapp) return alert("Please enter your WhatsApp number starting with country code.");
+    if (whatsapp && !whatsapp.startsWith('+')) return alert("WhatsApp number must start with a country code (e.g., +256).");
     if (confirmInput && password !== confirmPassword) return alert("Passwords do not match.");
     
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -1309,6 +1318,14 @@ function getEffectiveUid() {
         if (name) {
           await updateProfile(userCredential.user, { displayName: name });
         }
+        
+        // Save additional registration info immediately to Firestore
+        await setDoc(doc(dbFirestore, "users", userCredential.user.uid), {
+          whatsapp: whatsapp,
+          name: name,
+          status: 'pending'
+        }, { merge: true });
+
         alert("Registration successful! You are now logged in.");
       }
     } catch (error) {
@@ -5725,6 +5742,7 @@ function getEffectiveUid() {
           
           <div id="email-login-form" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; margin-bottom: 15px;">
             ${isRegister ? `<input type="text" id="authName" placeholder="Full Name" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
+            ${isRegister ? `<input type="tel" id="authWhatsApp" placeholder="WhatsApp Number (e.g. +256...)" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
             <input type="email" id="authEmail" placeholder="Email Address" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
             <input type="password" id="authPassword" placeholder="Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">
             ${isRegister ? `<input type="password" id="authConfirmPassword" placeholder="Confirm Password" style="padding: 12px; border-radius: 8px; border: none; color: var(--text); background: white;">` : ''}
