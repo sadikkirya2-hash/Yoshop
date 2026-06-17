@@ -254,6 +254,35 @@ function getEffectiveUid() {
           </div>
       </div>
 
+      <!-- Shops Table View -->
+      <div id="admin-shops-list-view" style="display:none;">
+          <h3 class="u-mb-20">📋 Registered Shops Details</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+            <h4 class="u-m-0">Shop Registration Details</h4>
+            <button class="btn btn-info u-m-0" onclick="refreshAppAdminShopsTable()">↻ Refresh Table</button>
+          </div>
+          
+          <div class="u-overflow-x-auto">
+            <table class="u-w-full">
+              <thead>
+                <tr>
+                  <th class="u-text-center">Logo</th>
+                  <th>Shop Name</th>
+                  <th>Owner Account</th>
+                  <th>Contact</th>
+                  <th class="u-text-center">Status</th>
+                  <th>Subscription</th>
+                  <th>Last Sync</th>
+                  <th class="u-text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="appAdminShopsTableBody">
+                <tr><td colspan="8" class="u-text-center">Loading shops details...</td></tr>
+              </tbody>
+            </table>
+          </div>
+      </div>
+
       <!-- Settings View -->
       <div id="admin-settings-view" style="display:none;">
         <h3 class="u-mb-20">⚙️ App Admin Settings</h3>
@@ -294,11 +323,13 @@ function getEffectiveUid() {
     // Toggle view visibility
     document.getElementById('admin-dashboard-view').style.display = view === 'dashboard' ? 'block' : 'none';
     document.getElementById('admin-shops-view').style.display = view === 'shops' ? 'block' : 'none';
+    document.getElementById('admin-shops-list-view').style.display = view === 'shops-table' ? 'block' : 'none';
     document.getElementById('admin-settings-view').style.display = view === 'settings' ? 'block' : 'none';
 
     // Conditional data fetching based on active sub-view
     if (view === 'dashboard') fetchGlobalAnalytics();
     if (view === 'shops') refreshAppAdminShops();
+    if (view === 'shops-table') refreshAppAdminShopsTable();
     if (view === 'settings') {
       // Ensure inputs are synced when switching to settings view
       if (document.getElementById('appAdminNameInput')) document.getElementById('appAdminNameInput').value = appAdminSettings.username;
@@ -592,6 +623,101 @@ function getEffectiveUid() {
     } catch (error) {
       handleFirebaseError(error, "Load All Shops", "users (collection level)");
       container.innerHTML = '<p class="u-text-center u-w-full">Error loading shops. check console.</p>';
+    }
+  }
+
+  /**
+   * Fetches all registered shops and displays them in a table for detailed management
+   */
+  let lastShopsTableRefreshId = 0;
+  async function refreshAppAdminShopsTable() {
+    if (currentUserRole !== 'appAdmin') return;
+    
+    const currentRefreshId = ++lastShopsTableRefreshId;
+    const tbody = document.getElementById('appAdminShopsTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="8" class="u-text-center"><span class="spinner"></span> Loading shops details...</td></tr>';
+    
+    try {
+      const usersSnap = await getDocs(collection(dbFirestore, "users"));
+      
+      const seenEmails = new Set();
+      const rows = [];
+
+      if (usersSnap.empty) {
+        tbody.innerHTML = '<tr><td colspan="8" class="u-text-center">No registered shops found.</td></tr>';
+        return;
+      }
+
+      for (const userDoc of usersSnap.docs) {
+        if (currentRefreshId !== lastShopsTableRefreshId) return;
+
+        const uid = userDoc.id;
+        const dataDoc = await getDoc(doc(dbFirestore, "users", uid, "data", "SHOP_DATA"));
+        if (!dataDoc.exists()) continue;
+
+        const shopData = dataDoc.data();
+        if (uid === MASTER_APP_ADMIN_UID && (shopData.menu || []).length === 0) continue;
+
+        const userData = userDoc.data();
+        const userEmail = (userData.email || '').toLowerCase().trim();
+        const effectiveEmail = (uid.includes('@') && !userEmail) ? uid.toLowerCase().trim() : userEmail;
+
+        if (effectiveEmail && seenEmails.has(effectiveEmail)) continue;
+        if (effectiveEmail) seenEmails.add(effectiveEmail);
+
+        const shopSettings = shopData.settings || {};
+        const logoUrl = sanitizeLogoUrl(shopSettings.logo) || 'assets/icons/icon.png';
+        const userStatus = userData.status || 'active';
+        const shopStatus = (shopData.appAdminSettings && shopData.appAdminSettings.shopStatus) || 'active';
+        
+        let statusLabel = userStatus.charAt(0).toUpperCase() + userStatus.slice(1);
+        let statusClass = userStatus === 'active' ? 'active' : (userStatus === 'pending' ? 'suspended' : 'deactivated');
+        if (userStatus === 'active' && shopStatus !== 'active') {
+          statusLabel = shopStatus.charAt(0).toUpperCase() + shopStatus.slice(1);
+          statusClass = 'suspended';
+        }
+
+        const subExpires = userData.subscriptionExpires ? new Date(userData.subscriptionExpires) : null;
+        let subText = 'PROMO PLAN';
+        let subStyle = 'color: #28a745; font-weight: bold;';
+        if (subExpires) {
+          const isExpired = subExpires < new Date();
+          subText = subExpires.toLocaleDateString() + (isExpired ? ' (EXPIRED)' : '');
+          if (isExpired) subStyle = 'color: #dc3545; font-weight: bold;';
+          else subStyle = 'font-weight: bold;';
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="u-text-center"><img src="${logoUrl}" style="width:32px; height:32px; object-fit:contain; border-radius:4px; border:1px solid var(--border-color);" onerror="this.src='assets/icons/icon.png';"></td>
+          <td class="u-bold">${shopSettings.name || 'Unnamed Shop'}</td>
+          <td class="u-fs-08">${effectiveEmail || 'No Email'}</td>
+          <td class="u-fs-08">${shopSettings.contact || 'N/A'}</td>
+          <td class="u-text-center"><span class="shop-card-status ${statusClass}" style="padding: 2px 6px; font-size: 0.7em;">${statusLabel}</span></td>
+          <td class="u-fs-08" style="${subStyle}">${subText}</td>
+          <td class="u-fs-08">${shopData.lastUpdated ? new Date(shopData.lastUpdated).toLocaleDateString() : 'Never'}</td>
+          <td class="u-text-right">
+            <div style="display:flex; gap:4px; justify-content:flex-end;">
+              <button class="btn btn-info u-fs-08" style="padding:4px 8px; margin:0;" onclick="monitorShop('${uid}', '${(shopSettings.name || 'Unnamed Shop').replace(/'/g, "\\'")}')">Monitor</button>
+              ${userStatus === 'pending' ? `<button class="btn btn-success u-fs-08" style="padding:4px 8px; margin:0;" onclick="updateTargetUserStatus('${uid}', 'active'); refreshAppAdminShopsTable();">Approve</button>` : ''}
+              <button class="btn btn-danger u-fs-08" style="padding:4px 8px; margin:0;" onclick="deleteShop('${uid}', '${(shopSettings.name || 'Unnamed').replace(/'/g, "\\'")}')">Delete</button>
+            </div>
+          </td>
+        `;
+        rows.push(tr);
+      }
+
+      if (currentRefreshId === lastShopsTableRefreshId) {
+        tbody.innerHTML = '';
+        if (rows.length === 0) tbody.innerHTML = '<tr><td colspan="8" class="u-text-center">No active shops found.</td></tr>';
+        rows.forEach(row => tbody.appendChild(row));
+      }
+
+    } catch (error) {
+      handleFirebaseError(error, "Load Shops Table", "users");
+      tbody.innerHTML = '<tr><td colspan="8" class="u-text-center" style="color:red;">Error loading data.</td></tr>';
     }
   }
 
@@ -1037,6 +1163,11 @@ function getEffectiveUid() {
         shopsBtn.onclick = () => { showTab('appAdminTab', shopsBtn); switchAppAdminView('shops'); };
         shopsBtn.innerHTML = `<span>🏪</span><span>Shops</span>`;
 
+        const shopsListBtn = document.createElement('button');
+        shopsListBtn.id = 'nav-admin-shops-list';
+        shopsListBtn.onclick = () => { showTab('appAdminTab', shopsListBtn); switchAppAdminView('shops-table'); };
+        shopsListBtn.innerHTML = `<span>📋</span><span>Manage Shops</span>`;
+
         const settingsBtn = document.createElement('button');
         settingsBtn.id = 'nav-admin-settings';
         settingsBtn.onclick = () => { showTab('appAdminTab', settingsBtn); switchAppAdminView('settings'); };
@@ -1045,9 +1176,12 @@ function getEffectiveUid() {
         const logoutBtn = document.getElementById('nav-logout-btn');
         if (logoutBtn) {
           nav.insertBefore(shopsBtn, logoutBtn);
+          nav.insertBefore(shopsListBtn, logoutBtn);
           nav.insertBefore(settingsBtn, logoutBtn);
         } else {
-          nav.appendChild(shopsBtn); nav.appendChild(settingsBtn);
+          nav.appendChild(shopsBtn); 
+          nav.appendChild(shopsListBtn);
+          nav.appendChild(settingsBtn);
         }
       }
 
@@ -1116,8 +1250,7 @@ function getEffectiveUid() {
     if (btn) btn.innerHTML = '<span class="spinner"></span> Signing in...';
     
     try {
-      // Switched to Redirect to fix COOP policy blocks and popup-closed errors
-      await signInWithRedirect(auth, provider);
+      await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Login failed:", error);
       alert("Login failed: " + error.message);
@@ -1406,6 +1539,7 @@ function getEffectiveUid() {
         // Default to dashboard if no specific admin button is active
         const activeBtn = document.querySelector('nav button.active');
         if (activeBtn && activeBtn.id === 'nav-admin-shops') switchAppAdminView('shops');
+        else if (activeBtn && activeBtn.id === 'nav-admin-shops-list') switchAppAdminView('shops-table');
         else if (activeBtn && activeBtn.id === 'nav-admin-settings') switchAppAdminView('settings');
         else switchAppAdminView('dashboard');
         break;
@@ -5399,10 +5533,8 @@ function getEffectiveUid() {
       // Background Cloud Sync
       onAuthStateChanged(auth, async (user) => {
         currentUser = user;
-        if (user) console.log("Your Firebase UID is:", user.uid);
-        updateAuthUI(user);
-        
-        // Detect if the logged in person is the Super Admin
+
+        // Detect if the logged in person is the Super Admin BEFORE updating UI
         if (user && (user.uid === MASTER_APP_ADMIN_UID || user.email === 'sadikkirya@gmail.com')) {
           console.log("👑 Super Admin detected (" + user.email + "). Granting master access.");
           currentUserRole = 'appAdmin';
@@ -5415,6 +5547,9 @@ function getEffectiveUid() {
             if (adminTabBtn) showTab('appAdminTab', adminTabBtn);
           }, 500);
         }
+
+        if (user) console.log("Your Firebase UID is:", user.uid);
+        updateAuthUI(user);
 
         if (user) {
           console.log("Logged in, syncing cloud data in background...");
@@ -5744,7 +5879,7 @@ function getEffectiveUid() {
 
     nav.querySelectorAll('button').forEach(btn => {
       // Strictly hide App Admin specific buttons for non-AppAdmins
-      const isAdminSpecific = btn.id === 'nav-app-admin-btn' || btn.id === 'nav-admin-shops' || btn.id === 'nav-admin-settings';
+      const isAdminSpecific = btn.id === 'nav-app-admin-btn' || btn.id === 'nav-admin-shops' || btn.id === 'nav-admin-shops-list' || btn.id === 'nav-admin-settings';
       if (!isAppAdmin && isAdminSpecific) {
         btn.style.display = 'none';
         return;
@@ -5757,7 +5892,7 @@ function getEffectiveUid() {
         if (isAppAdmin) {
           // Hide shop navigation while looking at the Admin Management panel 
           // or if no monitoring session is active.
-          const isAdminBtn = tabId === 'appAdminTab' || ['nav-admin-shops', 'nav-admin-settings'].includes(btn.id);
+          const isAdminBtn = tabId === 'appAdminTab' || ['nav-admin-shops', 'nav-admin-shops-list', 'nav-admin-settings'].includes(btn.id);
           if (isInAdminTab || !isMonitoringMode) {
             btn.style.display = isAdminBtn ? 'flex' : 'none';
           } else {
@@ -6787,7 +6922,7 @@ Object.assign(window, {
   showLoginOverlay, testLocalNotification, toggleNotifications, dismissNotification, selectLoginRole, resetLoginStage,
   clearAllNotifications, refreshApp, handleSplashScreen, applyTheme, togglePINVisibility, loginWithPIN, lockApp, forgotPIN, searchTransactionsByRange, updateAppAdminCredentials, updateShopStatus, exportReportAsImage
   ,
-  refreshAppAdminShops, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
+  refreshAppAdminShops, refreshAppAdminShopsTable, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
   switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode, toggleReportCategoryDropdown
   , toggleReportOptionsDropdown, changeReportZoom
 });

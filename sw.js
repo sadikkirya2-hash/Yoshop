@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yoshop-v21'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yoshop-v22'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
@@ -11,6 +11,7 @@ const urlsToCache = [
   '/assets/icons/ios512.png',
   '/assets/icons/wind400.png',
   '/assets/icons/market.png',
+  '/assets/icons/icon.png',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js',
