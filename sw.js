@@ -2,7 +2,6 @@ const CACHE_NAME = 'yoshop-v22'; // Increment this version number whenever you m
 const urlsToCache = [
   '/',
   '/index.html',
-  '/manifest.json',
   '/app.js',
   '/style.css',
   '/assets/icons/android192x192.png',
@@ -59,6 +58,11 @@ self.addEventListener('fetch', (event) => {
         
         return fetch(event.request)
           .then((networkResponse) => {
+            // If manifest fetch fails in preview tunnel, return an empty 204 response instead of erroring.
+            if (event.request.url.endsWith('/manifest.json') && networkResponse.status !== 200) {
+              return new Response(null, { status: 204, statusText: 'No Manifest in Preview' });
+            }
+
             // Cache images and Firebase Storage assets dynamically when they are successfully fetched
             if (networkResponse && networkResponse.status === 200 && (event.request.destination === 'image' || event.request.url.includes('firebasestorage.googleapis.com'))) {
               const responseToCache = networkResponse.clone();

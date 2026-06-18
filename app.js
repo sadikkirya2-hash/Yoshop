@@ -6316,8 +6316,8 @@ function getEffectiveUid() {
       overlay.innerHTML = `
         ${deviceLabel}
         ${logoHtml}
-        <h1 style="font-size: 3em; margin-top: 0px; margin-bottom: 12px;">${settings?.name || 'YoShop'}</h1>
-        <p style="font-size: 1.2em; margin-bottom: 12px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
+        <h1 style="font-size: 3em; margin-top: 0px; margin-bottom: 0px;">${settings?.name || 'YoShop'}</h1>
+        <p style="font-size: 1.2em; margin-top: 0px; margin-bottom: 12px;">Welcome, ${currentUser.displayName || currentUser.email.split('@')[0]}</p>
         
         ${statusDisplay}
 
@@ -6607,7 +6607,12 @@ function getEffectiveUid() {
           const newWorker = registration.installing;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              showUpdateNotification();
+              // Immediately trigger update if not in an active checkout session
+              if (!isCheckoutActive()) {
+                triggerAppUpdate(false);
+              } else {
+                showUpdateNotification();
+              }
             }
           });
         });
@@ -6651,10 +6656,20 @@ function getEffectiveUid() {
           setTimeout(() => { progressBar.style.width = '100%'; }, 50);
         }
         
-        // Small delay to ensure user sees the "Updating" message
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        // Clear all caches but preserve IndexedDB (persistent data)
+        (async () => {
+          // 1. Clear in-memory query cache
+          if (typeof requestCache !== 'undefined' && requestCache.clear) {
+            requestCache.clear();
+          }
+
+          // 2. Clear browser CacheStorage (App Shell assets)
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+          }
+          setTimeout(() => { window.location.reload(); }, 1000);
+        })();
       }
     });
   }
@@ -6773,7 +6788,14 @@ function getEffectiveUid() {
     installAppBtn.textContent = 'Install App';
   });
   
-  // Handle manifest loading errors gracefully (common in development/tunnels)\n  if (document.currentScript && document.currentScript.onerror === undefined) {\n    window.addEventListener('error', (event) => {\n      if (event.message && event.message.includes('manifest')) {\n        console.warn('[PWA] Manifest loading error - continuing without PWA manifest');\n      }\n    }, true);\n  }
+  // Handle manifest loading errors gracefully (common in development/tunnels)
+  if (document.currentScript && document.currentScript.onerror === undefined) {
+    window.addEventListener('error', (event) => {
+      if (event.message && event.message.includes('manifest')) {
+        console.warn('[PWA] Manifest loading error - continuing without PWA manifest');
+      }
+    }, true);
+  }
 
   installAppBtn.addEventListener('click', async () => {
     // Case 1: `beforeinstallprompt` was fired (Chrome, Edge)

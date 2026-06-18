@@ -6,7 +6,26 @@
 <title>YoShop</title>
 <link rel="icon" type="image/png" href="assets/icons/android192x192.png"> <!-- Using android192x192.png as the default favicon -->
 <link rel="canonical" href="https://yoshop.netlify.app/"> <!-- Updated canonical URL -->
-<link rel="manifest" href="manifest.json" onerror="console.warn('Manifest load failed - may be blocked by auth tunnel');">
+<script>
+  const previewTunnel = location.hostname.endsWith('.github.dev') || location.hostname.endsWith('.app.github.dev');
+  if (!previewTunnel) {
+    const manifestLink = document.createElement('link');
+    manifestLink.rel = 'manifest';
+    manifestLink.href = 'manifest.json';
+    manifestLink.onerror = () => console.info('Manifest load failed - may be blocked by network or preview tunnel.');
+    document.head.appendChild(manifestLink);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (previewTunnel) {
+      const banner = document.createElement('div');
+      banner.id = 'preview-warning-banner';
+      banner.className = 'preview-warning-banner';
+      banner.textContent = 'Preview mode: manifest load is skipped in GitHub.dev. PWA install features are unavailable in this preview.';
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+  });
+</script>
 <!-- PWA Meta Tags -->
 <meta name="theme-color" content="#f82c33"/>
 <link rel="apple-touch-icon" href="assets/icons/ios192.png">
