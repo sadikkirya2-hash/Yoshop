@@ -50,8 +50,8 @@ let isInitialLoadComplete = false; // Safety flag to prevent overwriting cloud d
 let isMonitoringMode = false; // Tracks if App Admin has activated monitoring context
 
 const defaultAppAdminSettings = {
-  username: "sadikkirya@gmail.com",
-  pin: "Admin@1997",
+  username: "",
+  pin: "",
   shopStatus: "active"
 };
 let appAdminSettings = { ...defaultAppAdminSettings };
@@ -62,6 +62,161 @@ let isDebouncing = false;
 const SYNC_DEBOUNCE_DELAY = 300; // 300ms debounce for rapid changes
 let lastSyncTime = 0;
 const MIN_SYNC_INTERVAL = 500; // Minimum 500ms between syncs to respect Firebase limits
+
+// ===== PRODUCTION OPTIMIZATION: Request Deduplication & Caching =====
+const requestCache = new Map(); // Cache for expensive queries
+const CACHE_TTL = 30000; // 30 seconds cache for list queries
+let requestInFlight = new Map(); // Track in-flight requests to avoid duplicates
+
+/**
+ * Deduplicates and caches expensive Firestore queries
+ * Prevents N+1 queries and duplicate API calls
+ */
+async function getCachedQuery(cacheKey, queryFn, ttl = CACHE_TTL) {
+  const now = Date.now();
+  
+  // Check if request is already in flight
+  if (requestInFlight.has(cacheKey)) {
+    return await requestInFlight.get(cacheKey);
+  }
+  
+  // Check cache validity
+  const cached = requestCache.get(cacheKey);
+  if (cached && (now - cached.timestamp) < ttl) {
+    return cached.data;
+  }
+  
+  // Create new request promise
+  const promise = queryFn().then(data => {
+    requestCache.set(cacheKey, { data, timestamp: now });
+    requestInFlight.delete(cacheKey);
+    return data;
+  }).catch(error => {
+    requestInFlight.delete(cacheKey);
+    throw error;
+  });
+  
+  requestInFlight.set(cacheKey, promise);
+  return promise;
+}
+
+// ===== PRODUCTION OPTIMIZATION: Firestore Pagination with Cursors =====
+let shopsPaginationState = {
+  currentPage: 0,
+  pageSize: 25, // Increased from 10 for better performance
+  lastDocSnapshot: null,
+  hasMore: true,
+  totalLoaded: 0
+};
+
+/**
+ * Optimized shop query with pagination and aggregation
+ * Reduces memory usage and API calls for 100+ shops
+ */
+async function getShopsPageOptimized(pageNumber = 0) {
+  try {
+    const pageSize = 25;
+    const startIndex = pageNumber * pageSize;
+    
+    // For production with 100+ shops, use aggregation queries when available
+    // or fetch with pagination cursor
+    const usersSnap = await getCachedQuery(
+      `shops_page_${pageNumber}`,
+      async () => {
+        const queryConstraints = [
+          orderBy('lastLogin', 'desc'),
+          limit(pageSize * (pageNumber + 1))
+        ];
+        return await getDocs(query(collection(dbFirestore, "users"), ...queryConstraints));
+      },
+      60000 // Cache for 1 minute
+    );
+    
+    return {
+      docs: usersSnap.docs,
+      pageNumber,
+      pageSize,
+      total: usersSnap.docs.length,
+      hasMore: usersSnap.docs.length === (pageSize * (pageNumber + 1))
+    };
+  } catch (error) {
+    console.error('[QUERY] Shops page fetch failed:', error);
+    return { docs: [], error: error.message };
+  }
+}
+
+// ===== PRODUCTION ERROR MONITORING =====
+const errorLog = [];
+const MAX_ERROR_LOG_SIZE = 100;
+
+/**
+ * Production error logger with optional remote monitoring
+ * Captures stack traces and context for debugging
+ */
+function captureError(errorType, error, context = {}) {
+  const errorEntry = {
+    timestamp: new Date().toISOString(),
+    type: errorType,
+    message: error?.message || String(error),
+    stack: error?.stack,
+    context,
+    userAgent: navigator.userAgent,
+    url: window.location.href
+  };
+  
+  errorLog.push(errorEntry);
+  if (errorLog.length > MAX_ERROR_LOG_SIZE) {
+    errorLog.shift(); // Keep only last 100 errors
+  }
+  
+  console.error(`[${errorType}]`, error, context);
+  
+  // In production, you could send to external monitoring service:
+  // if (window.location.hostname !== 'localhost') {
+  //   sendToMonitoringService(errorEntry);
+  // }
+}
+
+/**
+ * Export error log for debugging
+ */
+function exportErrorLog() {
+  const blob = new Blob([JSON.stringify(errorLog, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `yoshop-errors-${new Date().toISOString().split('T')[0]}.json`;
+  link.click();
+}
+
+// ===== PRODUCTION OPTIMIZATION: Health Monitoring =====
+const healthMetrics = {
+  firebaseCalls: 0,
+  firebaseErrors: 0,
+  indexedDBWrites: 0,
+  indexedDBErrors: 0,
+  lastCheckTime: Date.now()
+};
+
+/**
+ * Get health status of app
+ */
+function getAppHealthStatus() {
+  const now = Date.now();
+  const uptime = now - healthMetrics.lastCheckTime;
+  const errorRate = healthMetrics.firebaseCalls > 0 
+    ? (healthMetrics.firebaseErrors / healthMetrics.firebaseCalls) * 100 
+    : 0;
+  
+  return {
+    status: errorRate < 5 ? 'healthy' : errorRate < 15 ? 'degraded' : 'critical',
+    uptime: `${(uptime / 1000 / 60).toFixed(2)} minutes`,
+    errorRate: `${errorRate.toFixed(2)}%`,
+    firebaseCalls: healthMetrics.firebaseCalls,
+    errors: healthMetrics.firebaseErrors,
+    cacheSize: requestCache.size
+  };
+}
 
 // Helper function to upload images to Firebase Storage
 async function uploadImage(base64Data, path) {
@@ -452,8 +607,7 @@ function getEffectiveUid() {
     if (!confirmation) return;
 
     const pin = prompt("Enter your Admin PIN to confirm deletion:");
-    // Allow both the configured pin and the hardcoded default to prevent lockout
-    if (pin !== appAdminSettings.pin && pin !== "Admin@1997") return alert("Incorrect PIN.");
+    if (pin !== appAdminSettings.pin) return alert("Incorrect PIN.");
 
     try {
       // If the admin is deleting their OWN account's shop data, 
@@ -511,9 +665,17 @@ function getEffectiveUid() {
     const loadingIndicator = document.getElementById('shops-loading-indicator');
     
     try {
-      // We query the top-level users collection to find all shops
-      // Note: This requires the Admin UID to have 'list' permissions in Security Rules
-      const usersSnap = await getDocs(collection(dbFirestore, "users"));
+      // ===== PRODUCTION OPTIMIZATION: Batched query with request deduplication =====
+      healthMetrics.firebaseCalls++;
+      
+      // Use optimized cached query instead of raw getDocs
+      const queryResult = await getCachedQuery(
+        'admin_shops_all',
+        () => getDocs(collection(dbFirestore, "users")),
+        60000 // Cache for 1 minute
+      );
+      
+      const usersSnap = queryResult;
       
       // Use Sets to track processed UIDs and Emails to prevent UI duplication
       const seenUids = new Set();
@@ -642,13 +804,43 @@ function getEffectiveUid() {
       // Final UI update: only if we are still the latest request
       if (currentRefreshId === lastShopsRefreshId) {
         container.innerHTML = ''; // Final clear right before appending
-        if (shopCards.length === 0) container.innerHTML = '<p class="u-text-center u-w-full">No active shops found.</p>';
-        shopCards.forEach(card => container.appendChild(card));
+        if (shopCards.length === 0) {
+          container.innerHTML = '<p class="u-text-center u-w-full">No active shops found.</p>';
+          return;
+        }
+        
+        // ===== PRODUCTION OPTIMIZATION: Improved pagination for 100+ shops =====
+        const shopsPerPage = 25; // Increased from 10 for better loading
+        const initialShops = shopCards.slice(0, shopsPerPage);
+        const remainingShops = shopCards.slice(shopsPerPage);
+        
+        initialShops.forEach(card => container.appendChild(card));
+        
+        if (remainingShops.length > 0) {
+          const showMoreContainer = document.createElement('div');
+          showMoreContainer.style.textAlign = 'center';
+          showMoreContainer.style.padding = '20px';
+          showMoreContainer.innerHTML = `
+            <button class="btn btn-info" onclick="document.getElementById('appAdminShopCardsContainer').querySelectorAll('.shop-card.hidden').forEach(c => { c.classList.remove('hidden'); c.style.display=''; }); this.style.display='none';" style="padding: 12px 30px;">
+              Show ${remainingShops.length} More Shops (${shopCards.length} total)
+            </button>
+          `;
+          container.appendChild(showMoreContainer);
+          
+          // Add hidden class to remaining shops
+          remainingShops.forEach(card => {
+            card.classList.add('hidden');
+            card.style.display = 'none';
+            container.appendChild(card);
+          });
+        }
       }
 
     } catch (error) {
+      healthMetrics.firebaseErrors++;
+      captureError('ADMIN_SHOPS_REFRESH', error);
       handleFirebaseError(error, "Load All Shops", "users (collection level)");
-      container.innerHTML = '<p class="u-text-center u-w-full">Error loading shops. check console.</p>';
+      container.innerHTML = '<p class="u-text-center u-w-full">Error loading shops. Check console.</p>';
     }
   }
 
@@ -740,8 +932,36 @@ function getEffectiveUid() {
 
       if (currentRefreshId === lastShopsTableRefreshId) {
         tbody.innerHTML = '';
-        if (rows.length === 0) tbody.innerHTML = '<tr><td colspan="8" class="u-text-center">No active shops found.</td></tr>';
-        rows.forEach(row => tbody.appendChild(row));
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="u-text-center">No active shops found.</td></tr>';
+          return;
+        }
+        
+        // Show first 20 rows, add "Show More" button if needed
+        const rowsPerPage = 20;
+        const initialRows = rows.slice(0, rowsPerPage);
+        const remainingRows = rows.slice(rowsPerPage);
+        
+        initialRows.forEach(row => tbody.appendChild(row));
+        
+        if (remainingRows.length > 0) {
+          const showMoreRow = document.createElement('tr');
+          showMoreRow.innerHTML = `
+            <td colspan="8" style="text-align: center; padding: 20px;">
+              <button class="btn btn-info" onclick="const tbody = this.closest('tbody'); tbody.querySelectorAll('tr.shop-row-hidden').forEach(r => r.classList.remove('shop-row-hidden')); tbody.querySelectorAll('tr.shop-row-hidden').forEach(r => r.style.display = ''); this.closest('tr').style.display = 'none';" style="padding: 8px 20px;">
+                Show ${remainingRows.length} More Shops
+              </button>
+            </td>
+          `;
+          tbody.appendChild(showMoreRow);
+          
+          // Add hidden class to remaining rows
+          remainingRows.forEach(row => {
+            row.classList.add('shop-row-hidden');
+            row.style.display = 'none';
+            tbody.appendChild(row);
+          });
+        }
       }
 
     } catch (error) {
@@ -3064,7 +3284,37 @@ function getEffectiveUid() {
 
     const tbody = document.getElementById('transactionHistoryBody');
     tbody.innerHTML = ''; // Clear existing rows
-    tableRows.forEach(row => tbody.appendChild(row));
+    
+    if (tableRows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="u-text-center">No transactions found.</td></tr>';
+      return;
+    }
+    
+    // Show first 50 transactions, add "Show More" button if needed
+    const txnPerPage = 50;
+    const initialRows = tableRows.slice(0, txnPerPage);
+    const remainingRows = tableRows.slice(txnPerPage);
+    
+    initialRows.forEach(row => tbody.appendChild(row));
+    
+    if (remainingRows.length > 0) {
+      const showMoreRow = document.createElement('tr');
+      showMoreRow.innerHTML = `
+        <td colspan="3" style="text-align: center; padding: 20px;">
+          <button class="btn btn-info" onclick="const tbody = this.closest('tbody'); tbody.querySelectorAll('tr.txn-row-hidden').forEach(r => r.classList.remove('txn-row-hidden')); tbody.querySelectorAll('tr.txn-row-hidden').forEach(r => r.style.display = ''); this.closest('tr').style.display = 'none';" style="padding: 8px 20px;">
+            Show ${remainingRows.length} More Transactions
+          </button>
+        </td>
+      `;
+      tbody.appendChild(showMoreRow);
+      
+      // Add hidden class to remaining rows
+      remainingRows.forEach(row => {
+        row.classList.add('txn-row-hidden');
+        row.style.display = 'none';
+        tbody.appendChild(row);
+      });
+    }
   }
   
   /**
@@ -3174,7 +3424,7 @@ function getEffectiveUid() {
 
   function deleteTransaction(index) {
     const pin = prompt("Enter Admin PIN to delete transaction:");
-    if (pin !== (settings.managerPIN || "1234")) {
+    if (!settings.managerPIN || pin !== settings.managerPIN) {
       return alert("Incorrect PIN. Access denied.");
     }
 
@@ -4335,8 +4585,8 @@ function getEffectiveUid() {
     setVal('currency', settings.currency || '$');
     setVal('lowStockThreshold', (settings.lowStockThreshold !== undefined && settings.lowStockThreshold !== null) ? settings.lowStockThreshold : 10);
     setVal('taxRate', settings.taxRate || 0);
-    setVal('managerPIN', settings.managerPIN || "1234");
-    setVal('confirmManagerPIN', settings.managerPIN || "1234");
+    setVal('managerPIN', settings.managerPIN || "");
+    setVal('confirmManagerPIN', settings.managerPIN || "");
 
     const logoPreview = document.getElementById('logoPreview');
     const logoUrl = sanitizeLogoUrl(settings.logo);
@@ -5382,6 +5632,10 @@ function getEffectiveUid() {
     try {
       console.log('🟢 [SYNC] Setting up real-time listener for cross-device sync...');
       
+      // ===== PRODUCTION OPTIMIZATION: Debounced real-time updates =====
+      let pendingUpdate = null;
+      let updateTimer = null;
+      
       unsubscribeSync = onSnapshot(
         doc(dbFirestore, "users", uid, "data", "SHOP_DATA"),
         { includeMetadataChanges: true },
@@ -5395,55 +5649,79 @@ function getEffectiveUid() {
             if (!docSnap.metadata.hasPendingWrites) {
               console.log('🔄 [SYNC] ✅ Real-time update from cloud (from another device/tab)');
               
-              // Update global state with cloud data
-              menu = cloudData.menu || menu;
-              activeOrders = cloudData.activeOrders || activeOrders;
-              settings = cloudData.settings || settings;
-              staff = cloudData.staff || staff;
-              dishCategories = cloudData.dishCategories || dishCategories;
-              customers = cloudData.customers || customers;
-              units = cloudData.units || units;
-              restockHistory = cloudData.restockHistory || restockHistory;
-              appAdminSettings = {
-                ...defaultAppAdminSettings,
-                ...(cloudData.appAdminSettings || {})
+              // DEBOUNCE: Collect updates and apply them in batch to prevent UI thrashing
+              if (updateTimer) clearTimeout(updateTimer);
+              
+              pendingUpdate = {
+                menu: cloudData.menu || menu,
+                activeOrders: cloudData.activeOrders || activeOrders,
+                settings: cloudData.settings || settings,
+                staff: cloudData.staff || staff,
+                dishCategories: cloudData.dishCategories || dishCategories,
+                customers: cloudData.customers || customers,
+                units: cloudData.units || units,
+                restockHistory: cloudData.restockHistory || restockHistory,
+                appAdminSettings: {
+                  ...defaultAppAdminSettings,
+                  ...(cloudData.appAdminSettings || {})
+                }
               };
+              
+              // Apply batched updates after 200ms to coalesce rapid changes
+              updateTimer = setTimeout(async () => {
+                try {
+                  // Update global state with cloud data
+                  menu = pendingUpdate.menu;
+                  activeOrders = pendingUpdate.activeOrders;
+                  settings = pendingUpdate.settings;
+                  staff = pendingUpdate.staff;
+                  dishCategories = pendingUpdate.dishCategories;
+                  customers = pendingUpdate.customers;
+                  units = pendingUpdate.units;
+                  restockHistory = pendingUpdate.restockHistory;
+                  appAdminSettings = pendingUpdate.appAdminSettings;
 
-              // Fetch transactions separately from sub-collection
-              loadTransactionsFromCloud(uid);
+                  // Fetch transactions separately from sub-collection
+                  await loadTransactionsFromCloud(uid);
 
-              // Mark initial load as complete
-              isInitialLoadComplete = true;
+                  // Mark initial load as complete
+                  isInitialLoadComplete = true;
 
-              // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
-              saveData(false); 
+                  // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
+                  await saveData(false); 
 
-              // Surgically update the UI if we're on the Shop tab to prevent "shaking"
-              const activeTab = document.querySelector('section.active');
-              if (activeTab && activeTab.id === 'menuTab') {
-                updateMenuUI();
-                // Update the menu total display
-                const totals = calculateTransactionTotals(activeOrders[CART_ID]?.items || []);
-                const menuTotalEl = document.getElementById('menuTotal');
-                if (menuTotalEl) menuTotalEl.textContent = formatCurrency(totals.total);
-              } else {
-                refreshCurrentView();
-              }
-              updateDashboard();
-              applyTheme();
+                  // Surgically update the UI if we're on the Shop tab to prevent "shaking"
+                  const activeTab = document.querySelector('section.active');
+                  if (activeTab && activeTab.id === 'menuTab') {
+                    updateMenuUI();
+                    // Update the menu total display
+                    const totals = calculateTransactionTotals(activeOrders[CART_ID]?.items || []);
+                    const menuTotalEl = document.getElementById('menuTotal');
+                    if (menuTotalEl) menuTotalEl.textContent = formatCurrency(totals.total);
+                  } else {
+                    refreshCurrentView();
+                  }
+                  updateDashboard();
+                  applyTheme();
 
-              // Update login staff list if snapshot arrives while overlay is up
-              const list = document.getElementById('staffNamesList');
-              if (list) {
-                list.innerHTML = '<option value="Admin">' + (staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('');
-              }
+                  // Update login staff list if snapshot arrives while overlay is up
+                  const list = document.getElementById('staffNamesList');
+                  if (list) {
+                    list.innerHTML = '<option value="Admin">' + (staff || []).filter(s => s.isActive !== false).map(s => `<option value="${s.name}">`).join('');
+                  }
 
-              // Visual feedback on the sync button
-              const statusEl = document.getElementById('connectivity-status');
-              if (statusEl && statusEl.classList) {
-                statusEl.classList.add('sync-pulse');
-                setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
-              }
+                  // Visual feedback on the sync button
+                  const statusEl = document.getElementById('connectivity-status');
+                  if (statusEl && statusEl.classList) {
+                    statusEl.classList.add('sync-pulse');
+                    setTimeout(() => statusEl.classList.remove('sync-pulse'), 600);
+                  }
+                  
+                  pendingUpdate = null;
+                } catch (error) {
+                  captureError('SYNC_UPDATE', error, { uid });
+                }
+              }, 200); // OPTIMIZATION: 200ms debounce prevents UI thrashing
             } else {
               console.log('📤 [SYNC] Local changes acknowledged by cloud');
             }
@@ -5454,12 +5732,14 @@ function getEffectiveUid() {
           }
         },
         (error) => {
+          captureError('SYNC_LISTENER', error, { uid });
           handleFirebaseError(error, "Real-Time Sync Listener", `users/${uid}/data/SHOP_DATA`);
           console.log('Falling back to local-only mode. You can still use the app offline.');
           isInitialLoadComplete = true; // Don't block local work if cloud fails
         }
       );
     } catch (error) {
+      captureError('SYNC_SETUP', error, { uid });
       console.warn("🟡 [SYNC] Error setting up real-time sync:", error.message);
       isInitialLoadComplete = true; // Allow offline operation
     }
@@ -6007,8 +6287,8 @@ function getEffectiveUid() {
     const enteredPin = pinInput?.value || '';
     
     if (loginSubStage === 'admin') {
-      const isMasterAdmin = (enteredPin === appAdminSettings.pin || enteredPin === 'Admin@1997');
-      const isOwner = (enteredPin === (settings.managerPIN || "1234"));
+      const isMasterAdmin = appAdminSettings.pin && enteredPin === appAdminSettings.pin;
+      const isOwner = settings.managerPIN && enteredPin === settings.managerPIN;
 
       if (isMasterAdmin || isOwner) {
         completePinLogin(isMasterAdmin ? 'appAdmin' : 'manager', [], 'Admin');
@@ -7004,5 +7284,8 @@ Object.assign(window, {
   ,
   refreshAppAdminShops, refreshAppAdminShopsTable, monitorShop, fetchGlobalAnalytics, deleteShop, updateTargetShopStatus,
   switchAppAdminView, updateTargetUserStatus, updateTargetSubscription, updateTargetSubscriptionDate, setFreePlan, generateAutoBarcode, toggleReportCategoryDropdown
-  , toggleReportOptionsDropdown, changeReportZoom
+  , toggleReportOptionsDropdown, changeReportZoom,
+  
+  // PRODUCTION: Monitoring & Debugging (Available in console)
+  getAppHealthStatus, exportErrorLog, captureError, getCachedQuery, getShopsPageOptimized, requestCache, errorLog
 });
