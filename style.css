@@ -1195,10 +1195,15 @@
 
 .menu-summary {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 20px;
-  padding: 10px;
+  /* Attractive, professional, modern styling for the total summary container */
+  background: var(--card); /* Use card background */
+  border-radius: 12px; /* Rounded corners */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08); /* Subtle shadow */
+  border: 1px solid var(--border-color); /* Light border */
+  padding: 15px 20px; /* More padding */
   margin-bottom: 10px;
 }
 
@@ -1231,7 +1236,13 @@
 
 /* Table Orders */
 .orders-table-footer {
-  text-align: right;
+  text-align: left;
+}
+
+#menuTotal {
+  font-size: 1.15em; /* Balanced size to match professional category titles */
+  font-weight: bold; /* Make it bold */
+  color: var(--primary); /* Use primary color for emphasis */
 }
 
 /* Add Dish Form */

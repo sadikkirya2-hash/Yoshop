@@ -2630,9 +2630,7 @@ function getEffectiveUid() {
     }
 
     const totals = calculateTransactionTotals(currentOrder.items);
-    const total = totals.total;
-
-    document.getElementById('menuTotal').textContent = formatCurrency(total);
+    document.getElementById('menuTotal').textContent = formatCurrency(totals.total);
     saveData();
     updateDashboard(); // Add this line to update dashboard cards in real-time
   }
