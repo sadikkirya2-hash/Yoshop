@@ -183,6 +183,22 @@
       </div>
     </div>
   </div>
+
+  <!-- App Popup Modal -->
+  <div id="appPopupModal" class="receipt-modal-overlay">
+    <div class="receipt-modal-content app-popup-card">
+      <h3 id="appPopupTitle">Confirm Action</h3>
+      <p id="appPopupMessage">Are you sure you want to continue?</p>
+      <div id="appPopupInputWrapper" class="app-popup-input-wrapper" style="display:none;">
+        <input id="appPopupInput" class="app-popup-input" type="text" placeholder="Enter value">
+      </div>
+      <div class="receipt-actions app-popup-actions">
+        <button class="btn" id="appPopupCancel">Cancel</button>
+        <button class="btn btn-success" id="appPopupConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- This div is for printing only -->
   <div id="printArea" class="receipt-print-area"></div>
 

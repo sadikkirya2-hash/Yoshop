@@ -528,6 +528,42 @@
     font-size: 13px;
     line-height: 1.5;
   }
+  .app-popup-card {
+    background: var(--surface, #fff);
+    color: var(--text, #111);
+    padding: 24px;
+    border-radius: 18px;
+    width: min(420px, 92%);
+    max-width: 420px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.18);
+  }
+  .app-popup-card h3 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+  }
+  .app-popup-card p {
+    margin: 0 0 18px;
+    line-height: 1.6;
+    color: var(--text-muted, #666);
+    white-space: pre-wrap;
+  }
+  .app-popup-input-wrapper {
+    margin-bottom: 18px;
+  }
+  .app-popup-input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.16);
+    background: var(--input-bg, #f9f9fb);
+    color: var(--text, #111);
+  }
+  .app-popup-input:focus {
+    outline: none;
+    border-color: var(--primary, #1976d2);
+  }
+  .app-popup-actions { justify-content: flex-end; gap: 10px; }
   .receipt-header { text-align: center; margin-bottom: 10px; }
   .receipt-header .logo { font-size: 40px; margin-bottom: 10px; }
   .receipt-header h3 { margin: 0; font-size: 1.3em; text-transform: uppercase; letter-spacing: 1px; }

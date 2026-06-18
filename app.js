@@ -603,11 +603,19 @@ function getEffectiveUid() {
   async function deleteShop(shopUid, shopName) {
     if (currentUserRole !== 'appAdmin') return;
     
-    const confirmation = confirm(`CRITICAL: Are you sure you want to PERMANENTLY delete "${shopName}"?\n\nThis will wipe all inventory, transactions, and settings. This cannot be undone.`);
+    const confirmation = await showAppConfirm(
+      `CRITICAL: Are you sure you want to PERMANENTLY delete "${shopName}"?\n\nThis will wipe all inventory, transactions, and settings. This cannot be undone.`,
+      'Delete Shop',
+      'Delete',
+      'Cancel'
+    );
     if (!confirmation) return;
 
-    const pin = prompt("Enter your Admin PIN to confirm deletion:");
-    if (pin !== appAdminSettings.pin) return alert("Incorrect PIN.");
+    const pin = await showAppPrompt('Enter your Admin PIN to confirm deletion:', 'Admin PIN Required', 'Admin PIN');
+    if (pin !== appAdminSettings.pin) {
+      await showAppAlert('Incorrect PIN.', 'Access Denied');
+      return;
+    }
 
     try {
       // If the admin is deleting their OWN account's shop data, 
@@ -1585,12 +1593,12 @@ function getEffectiveUid() {
   }
 
   async function handleForgotPassword() {
-    const email = document.getElementById('authEmail').value || prompt("Please enter your email address:");
+    const email = document.getElementById('authEmail').value || await showAppPrompt("Please enter your email address:", "Forgot Password", "Email");
     if (!email) return;
 
     try {
       await sendPasswordResetEmail(auth, email);
-      alert("Password reset email sent! Please check your inbox.");
+      await showAppAlert("Password reset email sent! Please check your inbox.", "Password Reset Sent");
     } catch (error) {
       alert("Error: " + error.message);
     }
@@ -1640,6 +1648,117 @@ function getEffectiveUid() {
   function closeAuthModal() {
     document.getElementById('authActionModal').style.display = 'none';
     activeAuthAction = null;
+  }
+
+  let activeAppPopupResolver = null;
+  let activeAppPopupKeydown = null;
+
+  function closeAppPopup(result = { confirmed: false, value: null }) {
+    const modal = document.getElementById('appPopupModal');
+    const confirmBtn = document.getElementById('appPopupConfirm');
+    const cancelBtn = document.getElementById('appPopupCancel');
+    const inputWrapper = document.getElementById('appPopupInputWrapper');
+
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+
+    confirmBtn.onclick = null;
+    cancelBtn.onclick = null;
+    modal.onclick = null;
+
+    if (activeAppPopupKeydown) {
+      document.removeEventListener('keydown', activeAppPopupKeydown);
+      activeAppPopupKeydown = null;
+    }
+
+    if (activeAppPopupResolver) {
+      activeAppPopupResolver(result);
+      activeAppPopupResolver = null;
+    }
+
+    if (inputWrapper) {
+      const inputEl = document.getElementById('appPopupInput');
+      inputEl.value = '';
+    }
+  }
+
+  function showAppPopup({ title = 'Confirm', message = '', confirmText = 'Confirm', cancelText = 'Cancel', showCancel = true, input = null, allowOutsideClose = true }) {
+    const modal = document.getElementById('appPopupModal');
+    const titleEl = document.getElementById('appPopupTitle');
+    const messageEl = document.getElementById('appPopupMessage');
+    const inputWrapper = document.getElementById('appPopupInputWrapper');
+    const inputEl = document.getElementById('appPopupInput');
+    const confirmBtn = document.getElementById('appPopupConfirm');
+    const cancelBtn = document.getElementById('appPopupCancel');
+
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    confirmBtn.textContent = confirmText;
+    cancelBtn.textContent = cancelText;
+    cancelBtn.style.display = showCancel ? 'inline-flex' : 'none';
+
+    if (input && input.enabled) {
+      inputWrapper.style.display = 'block';
+      inputEl.value = input.value || '';
+      inputEl.type = input.type || 'text';
+      inputEl.placeholder = input.placeholder || '';
+      if (input.maxlength) inputEl.maxLength = input.maxlength;
+      else inputEl.removeAttribute('maxlength');
+      inputEl.autocomplete = input.autocomplete || 'off';
+      setTimeout(() => inputEl.focus(), 50);
+    } else {
+      inputWrapper.style.display = 'none';
+      inputEl.value = '';
+    }
+
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    return new Promise(resolve => {
+      if (activeAppPopupResolver) {
+        activeAppPopupResolver({ confirmed: false, value: null });
+      }
+      activeAppPopupResolver = resolve;
+
+      const closePopup = (result) => {
+        closeAppPopup(result);
+      };
+
+      const onConfirm = () => closePopup({ confirmed: true, value: inputWrapper.style.display === 'block' ? inputEl.value.trim() : null });
+      const onCancel = () => closePopup({ confirmed: false, value: inputWrapper.style.display === 'block' ? inputEl.value.trim() : null });
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') onCancel();
+        if (event.key === 'Enter') onConfirm();
+      };
+
+      confirmBtn.onclick = onConfirm;
+      cancelBtn.onclick = onCancel;
+      modal.onclick = (event) => {
+        if (event.target === modal && allowOutsideClose) onCancel();
+      };
+
+      activeAppPopupKeydown = onKeyDown;
+      document.addEventListener('keydown', onKeyDown);
+    });
+  }
+
+  function showAppConfirm(message, title = 'Confirm', confirmText = 'Yes', cancelText = 'Cancel') {
+    return showAppPopup({ title, message, confirmText, cancelText, showCancel: true, input: null });
+  }
+
+  function showAppPrompt(message, title = 'Enter value', placeholder = '', defaultValue = '') {
+    return showAppPopup({
+      title,
+      message,
+      confirmText: 'Submit',
+      cancelText: 'Cancel',
+      showCancel: true,
+      input: { enabled: true, placeholder, value: defaultValue, type: 'text', maxlength: 1024 }
+    }).then(result => result.confirmed ? result.value : null);
+  }
+
+  function showAppAlert(message, title = 'Notice') {
+    return showAppPopup({ title, message, confirmText: 'OK', cancelText: 'Cancel', showCancel: false, input: null });
   }
 
   async function submitAuthAction() {
@@ -1707,13 +1826,14 @@ function getEffectiveUid() {
   }
 
   async function logout() {
-    if (confirm("Are you sure you want to log out?")) {
-      sessionStorage.removeItem('currentUserRole');
-      sessionStorage.removeItem('currentUserPermissions');
-      sessionStorage.removeItem('isPinVerified');
-      await signOut(auth);
-      location.reload();
-    }
+    const shouldLogout = await showAppConfirm("Are you sure you want to log out?", "Logout", "Logout", "Cancel");
+    if (!shouldLogout) return;
+
+    sessionStorage.removeItem('currentUserRole');
+    sessionStorage.removeItem('currentUserPermissions');
+    sessionStorage.removeItem('isPinVerified');
+    await signOut(auth);
+    location.reload();
   }
 
   function updateItemUnit(itemIndex, newUnit) {
@@ -1729,7 +1849,8 @@ function getEffectiveUid() {
       location.reload();
     } catch (error) {
       console.error("Failed to save data before refresh:", error);
-      if (confirm("Could not save data before refreshing. You may lose unsaved changes. Do you still want to refresh?")) {
+      const proceed = await showAppConfirm("Could not save data before refreshing. You may lose unsaved changes. Do you still want to refresh?", "Refresh App", "Continue", "Cancel");
+      if (proceed) {
         location.reload();
       }
     }
@@ -3422,58 +3543,63 @@ function getEffectiveUid() {
       document.getElementById('receiptContent').innerHTML = receiptHtml;
   }
 
-  function deleteTransaction(index) {
-    const pin = prompt("Enter Admin PIN to delete transaction:");
+  async function deleteTransaction(index) {
+    const pin = await showAppPrompt("Enter Admin PIN to delete transaction:", "Admin PIN Required", "Admin PIN");
     if (!settings.managerPIN || pin !== settings.managerPIN) {
-      return alert("Incorrect PIN. Access denied.");
+      await showAppAlert("Incorrect PIN. Access denied.", "Access Denied");
+      return;
     }
 
-    if (confirm(`Are you sure you want to permanently delete this transaction? This action cannot be undone.`)) {
-      const txToDelete = transactions[index];
-      transactions.splice(index, 1);
+    const confirmed = await showAppConfirm(`Are you sure you want to permanently delete this transaction? This action cannot be undone.`, "Delete Transaction", "Delete", "Cancel");
+    if (!confirmed) return;
 
-      // Delete from Cloud Sub-collection
-      const effectiveUid = getEffectiveUid();
-      if (effectiveUid && dbFirestore) {
-        const txRef = collection(dbFirestore, "users", effectiveUid, "transactions");
-        const q = query(txRef, where("date", "==", txToDelete.date), where("total", "==", txToDelete.total));
-        getDocs(q).then(snap => {
-          snap.forEach(async (doc) => {
-            await deleteDoc(doc.ref);
-          });
-        }).catch(e => console.error("Cloud delete failed:", e));
-      }
+    const txToDelete = transactions[index];
+    transactions.splice(index, 1);
 
-      saveData();
-      renderTransactions();
-      updateDashboard();
-      alert('Transaction deleted.');
+    // Delete from Cloud Sub-collection
+    const effectiveUid = getEffectiveUid();
+    if (effectiveUid && dbFirestore) {
+      const txRef = collection(dbFirestore, "users", effectiveUid, "transactions");
+      const q = query(txRef, where("date", "==", txToDelete.date), where("total", "==", txToDelete.total));
+      getDocs(q).then(snap => {
+        snap.forEach(async (doc) => {
+          await deleteDoc(doc.ref);
+        });
+      }).catch(e => console.error("Cloud delete failed:", e));
     }
+
+    saveData();
+    renderTransactions();
+    updateDashboard();
+    await showAppAlert("Transaction deleted.", "Deleted");
   }
-
-  function reopenTransaction(index) {
+  async function reopenTransaction(index) {
     const transactionToEdit = transactions[index];
 
     if (activeOrders[CART_ID] && activeOrders[CART_ID].items.length > 0) {
-      return alert(`Cannot re-open this bill because the cart is currently occupied. Please clear the cart first.`);
+      await showAppAlert(`Cannot re-open this bill because the cart is currently occupied. Please clear the cart first.`, "Action Blocked");
+      return;
     }
 
-    if (confirm(`This will move the transaction back to the active cart and delete the original bill record. Do you want to continue?`)) {
-      // Restore the order
-      activeOrders[CART_ID] = { 
-        items: transactionToEdit.items, 
-        server: transactionToEdit.customerName 
-      };
+    const confirmed = await showAppConfirm(`This will move the transaction back to the active cart and delete the original bill record. Do you want to continue?`, "Reopen Transaction", "Continue", "Cancel");
+    if (!confirmed) return;
 
-      // Delete the old transaction
-      transactions.splice(index, 1);
-      saveData();
-      updateDashboard();
-      alert(`Sale has been re-opened for editing.`);
-      // Navigate user to the restored order
-      showTab('menuTab', document.querySelector('nav button[onclick*="menuTab"]'));
-    }
+    // Restore the order
+    activeOrders[CART_ID] = {
+      items: transactionToEdit.items,
+      server: transactionToEdit.customerName
+    };
+
+    // Delete the old transaction
+    transactions.splice(index, 1);
+    saveData();
+    updateDashboard();
+    await showAppAlert(`Sale has been re-opened for editing.`, "Reopened");
+    // Navigate user to the restored order
+    showTab('menuTab', document.querySelector('nav button[onclick*="menuTab"]'));
   }
+
+  // ===== Reports =====
 
   // ===== Reports =====
   function populateReportFilters() {
@@ -4770,18 +4896,21 @@ function getEffectiveUid() {
     alert("Permissions updated successfully.");
   }
 
-  function deleteStaff(index) {
-    if (confirm(`Are you sure you want to remove ${staff[index].name}?`)) {
-      staff.splice(index, 1);
-      saveData();
-      renderStaffList();
-    }
+  async function deleteStaff(index) {
+    const confirmed = await showAppConfirm(`Are you sure you want to remove ${staff[index].name}?`, "Remove Staff", "Remove", "Cancel");
+    if (!confirmed) return;
+
+    staff.splice(index, 1);
+    saveData();
+    renderStaffList();
   }
 
   async function resetApp() {
-    if (confirm("WARNING: This will permanently delete ALL application data, including your menu, transactions, and settings. This action cannot be undone. Are you sure?")) {
-      try {
-        // If the database connection is open, we must close it before deleting.
+    const confirmed = await showAppConfirm("WARNING: This will permanently delete ALL application data, including your menu, transactions, and settings. This action cannot be undone. Are you sure?", "Reset Application", "Reset", "Cancel");
+    if (!confirmed) return;
+
+    try {
+      // If the database connection is open, we must close it before deleting.
         if (db) {
           db.close();
         }
@@ -4802,7 +4931,6 @@ function getEffectiveUid() {
         console.error("Error during app reset:", error);
       }
     }
-  }
 
   function populateCurrencies() {
     const currencies = {
@@ -6716,8 +6844,12 @@ function getEffectiveUid() {
 
   async function restoreData() {
     const fileInput = document.getElementById('restoreFile');
-    if (fileInput.files.length === 0) return alert("Please select a backup file to restore.");
-    if (!confirm("This will overwrite all current data. Are you sure you want to continue?")) return;
+    if (fileInput.files.length === 0) {
+      await showAppAlert("Please select a backup file to restore.", "Missing File");
+      return;
+    }
+    const confirmed = await showAppConfirm("This will overwrite all current data. Are you sure you want to continue?", "Restore Backup", "Restore", "Cancel");
+    if (!confirmed) return;
 
     const file = fileInput.files[0];
     const reader = new FileReader();
