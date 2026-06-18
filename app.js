@@ -6250,7 +6250,7 @@ function getEffectiveUid() {
 
       const subInfo = getSubscriptionInfo();
       const promoEmoji = (subInfo.label === "PROMO PLAN") ? ' 🎉' : '';
-      const promoMsgHtml = (subInfo.label === "PROMO PLAN") ? `<div style="margin-top: 5px; color: #28a745; font-size: 0.8em; font-weight: bold;">Enjoy your promo plan!</div>` : '';
+      const promoMsgHtml = '';
 
       const statusDisplay = `
         <div style="background: rgba(255,255,255,0.1); padding: 8px 15px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid ${subInfo.color}; text-align: left; width: 100%; max-width: 300px;">
