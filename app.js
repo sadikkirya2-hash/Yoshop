@@ -1273,6 +1273,12 @@ function getEffectiveUid() {
         handleFirebaseError(e, "Cloud Transaction Record", `users/${effectiveUid}/transactions`);
       }
     }
+
+    // 4. Show notification for this transaction on current device immediately (offline & online support)
+    if (transaction.date && !notifiedTransactions.has(transaction.date)) {
+      notifiedTransactions.add(transaction.date);
+      notifyTransaction(transaction, false);
+    }
   }
 
   /**
@@ -2564,28 +2570,42 @@ function getEffectiveUid() {
         bill.items.forEach(item => deductStock(item.name, item.qty));
         document.getElementById('paymentModal').style.display = 'none';
       } else {
-        alert("Payment cancelled. Remaining split bills will not be processed.");
-        saveData(); // Save any payments that were processed
+        await showAppAlert("Payment cancelled. Remaining split bills will not be processed.", "Payment Cancelled");
+        await saveData(); // Save any payments that were processed
         return; // Exit the loop
       }
     }
 
     // All payments processed, clear the original order
     delete activeOrders[CART_ID];
-    saveData();
+    await saveData();
     renderMenu();
     updateDashboard();
-    alert(`All split payments processed successfully!`);
+
+    // Calculate total of all split payments processed successfully
+    const totalProcessed = splitState.bills.reduce((sum, bill) => sum + calculateTransactionTotals(bill.items).total, 0);
+    const summaryTransaction = {
+      date: new Date().toISOString(),
+      customerName: serverName,
+      tableNo: 'Shop (Split)',
+      items: splitState.bills.flatMap(b => b.items),
+      total: totalProcessed,
+      paymentMethod: 'Split Payments'
+    };
+    showSaleSuccessCelebration(summaryTransaction, 0);
   }
 
   // ===== Orders =====
-  function addToOrder(cartId, name, notes = null) {
+  async function addToOrder(cartId, name, notes = null) {
     if (!activeOrders[cartId]) {
       activeOrders[cartId] = { items: [], server: '' };
     }
 
     const dish = menu.find(d => d.name === name);
-    if (!dish) return alert("Item not found.");
+    if (!dish) {
+      await showAppAlert("Item not found.", "Error");
+      return;
+    }
 
     // Check current availability across all open carts
     const totalStock = calculateDishStock(dish, true);
@@ -2595,17 +2615,19 @@ function getEffectiveUid() {
         .reduce((sum, item) => sum + item.qty, 0);
 
     if (totalInCarts + 1 > totalStock) {
-        return alert(`Cannot add more "${name}". Only ${totalStock} units available in stock, and ${totalInCarts} are already in carts.`);
+        await showAppAlert(`Cannot add more "${name}". Only ${totalStock} units available in stock, and ${totalInCarts} are already in carts.`, "Out of Stock");
+        return;
     }
 
     // If notes are being added, we always create a new item.
     if (notes !== null) {
-        const note = prompt(`Add special requests for ${name}:`, "");
+        const note = await showAppPrompt(`Add special requests for ${name}:`, "Special Request", "Enter special requests...");
         if (note !== null) { // prompt not cancelled
             // Add as a new line item with a unique ID
             activeOrders[cartId].items.push({ ...dish, qty: 1, notes: note, id: Date.now() });
             updateOrders(cartId);
             updateMenuUI();
+            playQtyChangeSound(true);
         }
         return;
     }
@@ -2616,6 +2638,7 @@ function getEffectiveUid() {
 
     updateOrders(cartId);
     updateMenuUI(); // Surgically update the UI instead of full render
+    playQtyChangeSound(true);
   }
 
   function decreaseQty(cartId, name, id = null) {
@@ -2632,6 +2655,7 @@ function getEffectiveUid() {
     }
     updateOrders(cartId);
     updateMenuUI(); // Surgically update the UI instead of full render
+    playQtyChangeSound(false);
   }
 
   // ===== Tables =====
@@ -2772,7 +2796,8 @@ function getEffectiveUid() {
     const finalTotal = totals.total - discountAmount;
 
     if (paymentMethod === 'Cash' && (isNaN(amountTendered) || amountTendered < finalTotal)) {
-      return alert("Amount tendered must be greater than or equal to the total due.");
+      await showAppAlert("Amount tendered must be greater than or equal to the total due.", "Invalid Amount");
+      return;
     }
 
     // Decrement stock
@@ -2804,11 +2829,12 @@ function getEffectiveUid() {
     
     await recordTransaction(transaction); // Use individual record helper
 
+    const changeDue = amountTendered - finalTotal;
     delete activeOrders[CART_ID]; // Clear the order for the table
     await saveData();
     renderMenu();
     document.getElementById('paymentModal').style.display = 'none';
-    alert(`Sale processed successfully!`);
+    showSaleSuccessCelebration(transaction, changeDue > 0 ? changeDue : 0);
   }
 
   // Helper to calculate subtotal, tax, and total
@@ -5817,9 +5843,14 @@ function getEffectiveUid() {
     }
 
     if (unsubscribeSync) unsubscribeSync();
+    if (unsubscribeTransactionsSync) {
+      unsubscribeTransactionsSync();
+      unsubscribeTransactionsSync = null;
+    }
     
     try {
       console.log('🟢 [SYNC] Setting up real-time listener for cross-device sync...');
+      setupRealTimeTransactionsSync(uid);
       
       // ===== PRODUCTION OPTIMIZATION: Debounced real-time updates =====
       let pendingUpdate = null;
@@ -7365,6 +7396,216 @@ function getEffectiveUid() {
 
     const pdfBlob = doc.output('bloburl');
     window.open(pdfBlob, '_blank');
+  }
+
+  // ===== Sound Effects (Web Audio API) =====
+  function playQtyChangeSound(isIncrement) {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const audioCtx = new AudioContext();
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      const startFreq = isIncrement ? 550 : 450;
+      const endFreq = isIncrement ? 750 : 350;
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + 0.08);
+      
+      gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.09);
+      
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.09);
+    } catch (e) {
+      console.warn("Could not play sound effect:", e);
+    }
+  }
+
+  function playCelebrationSound() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      
+      // Play C major arpeggio sequence (C5, E5, G5, C6)
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, index) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + index * 0.1);
+        
+        gain.gain.setValueAtTime(0, ctx.currentTime + index * 0.1);
+        gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + index * 0.1 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + index * 0.1 + 0.25);
+        
+        osc.start(ctx.currentTime + index * 0.1);
+        osc.stop(ctx.currentTime + index * 0.1 + 0.3);
+      });
+    } catch (e) {
+      console.warn("Could not play celebration sound:", e);
+    }
+  }
+
+  // ===== Sales Success Celebration Popup =====
+  let lastProcessedTransaction = null;
+  
+  function triggerConfettiAnimation(container) {
+    const colors = ['#ff6b35', '#ffb703', '#fb8500', '#219ebc', '#8ecae6', '#4caf50', '#e91e63'];
+    for (let i = 0; i < 60; i++) {
+      const p = document.createElement('div');
+      p.className = 'confetti-particle';
+      p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      p.style.left = '50%';
+      p.style.top = '50%';
+      
+      const angle = Math.random() * Math.PI * 2;
+      const velocity = 50 + Math.random() * 120;
+      const tx = Math.cos(angle) * velocity;
+      const ty = Math.sin(angle) * velocity - (20 + Math.random() * 45); // slight upward bias
+      
+      p.style.setProperty('--tx', `${tx}px`);
+      p.style.setProperty('--ty', `${ty}px`);
+      
+      const size = 5 + Math.random() * 8;
+      p.style.width = `${size}px`;
+      p.style.height = `${size}px`;
+      p.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+      
+      p.style.animationDelay = `${Math.random() * 0.12}s`;
+      p.style.animationDuration = `${0.7 + Math.random() * 0.8}s`;
+      
+      container.appendChild(p);
+      setTimeout(() => p.remove(), 1600);
+    }
+  }
+
+  function showSaleSuccessCelebration(transaction, changeDue = 0) {
+    lastProcessedTransaction = transaction;
+    
+    document.getElementById('successTotalAmount').textContent = formatCurrency(transaction.total);
+    const changeRow = document.getElementById('successChangeRow');
+    if (transaction.paymentMethod === 'Cash' && changeDue > 0) {
+      document.getElementById('successChangeDue').textContent = formatCurrency(changeDue);
+      changeRow.style.display = 'flex';
+    } else {
+      changeRow.style.display = 'none';
+    }
+    document.getElementById('successPaymentMethod').textContent = transaction.paymentMethod;
+    
+    // Silent load in receipt modal so standard printing functions work out of the box
+    const receiptModal = document.getElementById('receiptModal');
+    receiptModal._transactionData = transaction;
+    populateReceiptContent(transaction);
+    
+    const modal = document.getElementById('saleSuccessModal');
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    
+    // confettis
+    const animWrapper = modal.querySelector('.celebration-animation-wrapper');
+    animWrapper.querySelectorAll('.confetti-particle').forEach(p => p.remove());
+    triggerConfettiAnimation(animWrapper);
+    
+    playCelebrationSound();
+  }
+
+  // ===== Real-time Transaction Notifications =====
+  const notifiedTransactions = new Set();
+  const appLoadedTime = Date.now();
+  let unsubscribeTransactionsSync = null;
+
+  function triggerPushNotification(title, body) {
+    if (Notification.permission === 'granted') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, {
+            body: body,
+            icon: 'assets/icons/icon.png',
+            badge: 'assets/icons/android192x192.png',
+            vibrate: [200, 100, 200]
+          });
+        }).catch(err => {
+          console.warn('SW push notification failed:', err);
+          new Notification(title, { body, icon: 'assets/icons/icon.png' });
+        });
+      } else {
+        new Notification(title, { body, icon: 'assets/icons/icon.png' });
+      }
+    }
+  }
+
+  function notifyTransaction(tx, isFromOtherDevice = false) {
+    const formattedAmount = formatCurrency(tx.total);
+    const method = tx.paymentMethod || 'Payment';
+    const serverName = tx.customerName || 'Staff';
+    
+    const title = isFromOtherDevice ? `New Sale: ${formattedAmount}` : `Sale Processed: ${formattedAmount}`;
+    const body = isFromOtherDevice 
+      ? `A transaction of ${formattedAmount} (${method}) was completed by ${serverName} on another device.` 
+      : `Transaction of ${formattedAmount} (${method}) processed successfully.`;
+      
+    triggerPushNotification(title, body);
+    addNotification(body, 'success');
+    playNotificationSound();
+  }
+
+  function setupRealTimeTransactionsSync(uid) {
+    if (!dbFirestore) return;
+    if (unsubscribeTransactionsSync) unsubscribeTransactionsSync();
+
+    try {
+      console.log('🟢 [SYNC] Setting up real-time listener for transaction notifications...');
+      const txRef = collection(dbFirestore, "users", uid, "transactions");
+      const q = query(txRef, orderBy("date", "desc"), limit(10));
+
+      unsubscribeTransactionsSync = onSnapshot(
+        q,
+        { includeMetadataChanges: true },
+        async (snap) => {
+          let hasNewChanges = false;
+          snap.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              const tx = change.doc.data();
+              if (tx.date && !notifiedTransactions.has(tx.date)) {
+                notifiedTransactions.add(tx.date);
+                
+                const txTime = new Date(tx.date).getTime();
+                const isRecent = txTime > appLoadedTime - 30000;
+                
+                if (isRecent) {
+                  const isFromOtherDevice = !change.doc.metadata.hasPendingWrites;
+                  notifyTransaction(tx, isFromOtherDevice);
+                  hasNewChanges = true;
+                }
+              }
+            }
+          });
+
+          if (hasNewChanges) {
+            // Load and update state
+            await loadTransactionsFromCloud(uid);
+            renderTransactions();
+            updateDashboard();
+          }
+        },
+        (error) => {
+          captureError('TX_SYNC_LISTENER', error, { uid });
+        }
+      );
+    } catch (error) {
+      captureError('TX_SYNC_SETUP', error, { uid });
+    }
   }
 
   // ===== Notification Functions =====

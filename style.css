@@ -1828,3 +1828,143 @@ body.dark-mode #reportOutput table tfoot tr {
   width: 850px; /* Desktop standard width for reports */
   margin: 20px 0;
 }
+
+/* ===== Premium Custom Modal Cards & Success Animations ===== */
+.custom-modal-card {
+  background: var(--card);
+  color: var(--text);
+  padding: 28px;
+  border-radius: 20px;
+  box-shadow: 
+    0 4px 6px rgba(0,0,0,0.04), 
+    0 10px 30px rgba(0,0,0,0.1), 
+    0 20px 40px rgba(0,0,0,0.08);
+  border: 1px solid var(--border-color);
+  width: 95%;
+  max-height: 95vh;
+  display: flex;
+  flex-direction: column;
+  animation: popupFadeIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-sizing: border-box;
+}
+
+/* Success Celebration Modal Specifics */
+.sale-success-card {
+  max-width: 400px;
+  text-align: center;
+  align-items: center;
+}
+
+.celebration-animation-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 10px auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Success checkmark animation */
+.success-icon-ring {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border: 4px solid rgba(40, 167, 69, 0.2);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.success-icon-checkmark {
+  font-size: 48px;
+  color: #28a745;
+  font-weight: bold;
+  animation: checkmarkGrow 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  transform: scale(0);
+}
+
+@keyframes checkmarkGrow {
+  0% { transform: scale(0); opacity: 0; }
+  10% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Confetti particles */
+.confetti-particle {
+  position: absolute;
+  pointer-events: none;
+  animation: confettiFly 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  z-index: 10;
+}
+
+@keyframes confettiFly {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.3) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.success-title {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #28a745;
+}
+
+.success-message {
+  margin: 0 0 20px;
+  color: var(--text);
+  opacity: 0.8;
+  font-size: 0.95rem;
+}
+
+.success-details-box {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.success-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+}
+
+.success-row strong {
+  font-size: 1.1rem;
+}
+
+.payment-badge {
+  background: var(--primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.success-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.success-actions .btn {
+  margin: 0;
+  width: 100%;
+  padding: 12px;
+  font-weight: bold;
+  border-radius: 10px;
+}

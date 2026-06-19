@@ -86,7 +86,7 @@
 
   <!-- Bill Split Modal -->
   <div id="billSplitModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content split-modal-content">
+    <div class="custom-modal-card split-modal-content">
       <h3>Split Bill for Table <span id="splitBillTableId"></span></h3>
       <div class="split-modal-container">
         <!-- Unassigned Items Column -->
@@ -112,7 +112,7 @@
 
   <!-- Payment Modal -->
   <div id="paymentModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content payment-modal-content">
+    <div class="custom-modal-card payment-modal-content">
         <h3>Complete Payment</h3>
         <div id="paymentDetails">
             <div class="payment-details-wrapper">
@@ -148,7 +148,7 @@
 
   <!-- Camera Scanner Modal -->
   <div id="cameraScannerModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content camera-modal-content">
+    <div class="custom-modal-card camera-modal-content">
       <h3>Scan Barcode</h3>
       <div id="reader"></div>
       <div class="receipt-actions">
@@ -159,7 +159,7 @@
 
   <!-- Mobile Connect Modal -->
   <div id="mobileConnectModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content mobile-connect-modal-content">
+    <div class="custom-modal-card mobile-connect-modal-content">
         <h3>Connect Mobile Scanner</h3>
         <p>Scan this QR code with your phone to use it as a wireless barcode scanner.</p>
         <div id="mobileConnectQR" class="mobile-connect-qr"></div>
@@ -172,7 +172,7 @@
 
   <!-- Report Preview Modal -->
   <div id="reportPreviewModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content" style="max-width: 95%; width: 1000px; height: 90vh;">
+    <div class="custom-modal-card" style="max-width: 95%; width: 1000px; height: 90vh;">
       <h3 id="reportPreviewTitle">Report Preview</h3>
       <div id="reportPreviewContent" style="overflow: auto; flex-grow: 1; background: white; padding: 20px; border: 1px solid #ddd; color: black;">
         <!-- Report content will be cloned here -->
@@ -205,7 +205,7 @@
 
   <!-- App Popup Modal -->
   <div id="appPopupModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content app-popup-card">
+    <div class="custom-modal-card app-popup-card">
       <div id="appPopupIconWrap" class="app-popup-icon-wrap" style="display:none;">
         <span id="appPopupIcon" class="app-popup-icon"></span>
       </div>
@@ -217,6 +217,39 @@
       <div class="receipt-actions app-popup-actions">
         <button class="btn app-popup-btn-cancel" id="appPopupCancel">Cancel</button>
         <button class="btn btn-success app-popup-btn-confirm" id="appPopupConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales Success Celebration Modal -->
+  <div id="saleSuccessModal" class="receipt-modal-overlay">
+    <div class="custom-modal-card sale-success-card">
+      <div class="celebration-animation-wrapper">
+        <div class="success-icon-ring"></div>
+        <div class="success-icon-checkmark">✓</div>
+      </div>
+      <h3 class="success-title">Sale Successful!</h3>
+      <p class="success-message">The transaction has been processed.</p>
+      
+      <div class="success-details-box">
+        <div class="success-row">
+          <span>Amount Paid:</span>
+          <strong id="successTotalAmount">$0.00</strong>
+        </div>
+        <div class="success-row" id="successChangeRow">
+          <span>Change Due:</span>
+          <strong id="successChangeDue">$0.00</strong>
+        </div>
+        <div class="success-row">
+          <span>Method:</span>
+          <span id="successPaymentMethod" class="payment-badge">Cash</span>
+        </div>
+      </div>
+      
+      <div class="receipt-actions success-actions">
+        <button class="btn btn-success" onclick="printReceipt()">🖨️ Print Receipt</button>
+        <button class="btn btn-info" onclick="downloadCurrentReceiptAsPDF()">📄 View PDF</button>
+        <button class="btn btn-primary" onclick="document.getElementById('saleSuccessModal').style.display='none'; document.body.style.overflow='';" style="background: var(--primary);">New Sale</button>
       </div>
     </div>
   </div>
@@ -772,7 +805,7 @@
 
   <!-- Staff Permissions Modal -->
   <div id="staffPermissionsModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content" style="max-width: 500px;">
+    <div class="custom-modal-card" style="max-width: 500px;">
       <h3>Manage Permissions for <span id="permStaffName"></span></h3>
       <div id="editPermissionsGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px;">
         <!-- Permissions checkboxes will be injected here -->
@@ -787,7 +820,7 @@
 
   <!-- Custom Auth Action Modal -->
   <div id="authActionModal" class="receipt-modal-overlay">
-    <div class="receipt-modal-content" style="max-width: 350px;">
+    <div class="custom-modal-card" style="max-width: 350px;">
       <h3 id="authModalTitle">Account Security</h3>
       <p id="authModalDescription" class="u-fs-08 u-text-muted" style="margin-bottom: 15px;"></p>
       
