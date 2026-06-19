@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yoshop-v23'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yoshop-v24'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
@@ -45,6 +45,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   // Bypass service worker for development server scripts to avoid 502/MIME errors
   if (event.request.url.includes('fiveserver.js') || event.request.url.includes('livereload.js')) {
+    return;
+  }
+
+  // Bypass service worker for non-GET requests (e.g. POST, PUT, DELETE)
+  if (event.request.method !== 'GET') {
     return;
   }
 

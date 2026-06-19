@@ -240,6 +240,38 @@ async function uploadImage(base64Data, path) {
 }
 
 /**
+ * Clears a specific image URL from all Service Worker / Cache API caches
+ * to ensure the new version is fetched and displayed immediately.
+ */
+async function clearImageFromCache(url) {
+  if (!url || !window.caches) return;
+  try {
+    const cacheNames = await window.caches.keys();
+    for (const cacheName of cacheNames) {
+      const cache = await window.caches.open(cacheName);
+      // Delete the exact URL
+      const deletedExact = await cache.delete(url);
+      if (deletedExact) {
+        console.log(`[CACHE] Deleted exact URL from cache ${cacheName}:`, url);
+      }
+      
+      // Also delete any cache entries matching the URL without query parameters
+      const keys = await cache.keys();
+      for (const request of keys) {
+        const requestUrlClean = request.url.split('?')[0];
+        const targetUrlClean = url.split('?')[0];
+        if (requestUrlClean === targetUrlClean) {
+          await cache.delete(request);
+          console.log(`[CACHE] Deleted matched request URL from cache ${cacheName}:`, request.url);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[CACHE] Error clearing image from cache:', e);
+  }
+}
+
+/**
  * Returns the UID of the account currently being viewed/operated on.
  * This handles the context switch during Admin Monitoring mode.
  */
@@ -2067,6 +2099,22 @@ function getEffectiveUid() {
       const dish = menu.find(d => d.name === name);
       if (!dish) return;
 
+      // Surgically update the image if it changed
+      const img = card.querySelector('img');
+      const expectedImg = dish.image || "https://placehold.co/100";
+      if (img && img.getAttribute('src') !== expectedImg) {
+        img.src = expectedImg;
+      }
+
+      // Surgically update the price if it changed
+      const priceEl = card.querySelector('.menu-item-header p');
+      const expectedPriceHtml = `<span class="currency-symbol">${settings.currency || '$'}</span>${formatCurrency(dish.price)}`;
+      const currentPriceText = priceEl ? priceEl.textContent.trim() : '';
+      const expectedPriceText = `${settings.currency || '$'}${formatCurrency(dish.price)}`;
+      if (priceEl && currentPriceText !== expectedPriceText) {
+        priceEl.innerHTML = expectedPriceHtml;
+      }
+
       const totalInCarts = Object.values(activeOrders)
           .flatMap(order => order.items || [])
           .filter(item => item.name === name)
@@ -2146,6 +2194,11 @@ function getEffectiveUid() {
         // It's an update
         const index = parseInt(dishIndex, 10);
         const oldName = menu[index].name;
+        const oldImage = menu[index].image;
+
+        if (oldImage && oldImage !== image && image.startsWith('http')) {
+          clearImageFromCache(oldImage);
+        }
 
         // Preserve existing fields not managed by this form (like physical stock and units)
         let dishData = { 
@@ -4746,7 +4799,14 @@ function getEffectiveUid() {
     const logoFile = document.getElementById('companyLogo').files[0];
     if (logoFile) {
       const base64Logo = await toBase64(logoFile);
+      const oldLogo = settings.logo;
       settings.logo = await uploadImage(base64Logo, 'branding/logo.jpg');
+      if (oldLogo && oldLogo !== settings.logo) {
+        clearImageFromCache(oldLogo);
+      }
+      if (settings.logo) {
+        clearImageFromCache(settings.logo);
+      }
     }
 
     saveData();
@@ -5910,6 +5970,21 @@ function getEffectiveUid() {
               // Apply batched updates after 200ms to coalesce rapid changes
               updateTimer = setTimeout(async () => {
                 try {
+                  // Identify and clear changed images/logos from cache
+                  if (pendingUpdate.menu) {
+                    pendingUpdate.menu.forEach(cloudDish => {
+                      const localDish = menu.find(d => d.name === cloudDish.name);
+                      if (localDish && localDish.image && cloudDish.image && localDish.image !== cloudDish.image) {
+                        clearImageFromCache(localDish.image);
+                        clearImageFromCache(cloudDish.image);
+                      }
+                    });
+                  }
+                  if (pendingUpdate.settings && settings.logo && pendingUpdate.settings.logo && settings.logo !== pendingUpdate.settings.logo) {
+                    clearImageFromCache(settings.logo);
+                    clearImageFromCache(pendingUpdate.settings.logo);
+                  }
+
                   // Update global state with cloud data
                   menu = pendingUpdate.menu;
                   activeOrders = pendingUpdate.activeOrders;
@@ -5933,7 +6008,29 @@ function getEffectiveUid() {
                   // Surgically update the UI if we're on the Shop tab to prevent "shaking"
                   const activeTab = document.querySelector('section.active');
                   if (activeTab && activeTab.id === 'menuTab') {
-                    updateMenuUI();
+                    // Check if the menu items or categories structurally changed (e.g. rename, add, delete)
+                    const searchTerm = document.getElementById('menuSearch')?.value.toLowerCase() || '';
+                    const categoryFilter = document.getElementById('categoryFilter')?.value || '';
+                    const filteredMenu = menu.filter(dish => {
+                      const matchesSearch = dish.category && (dish.name.toLowerCase().includes(searchTerm) || (dish.barcode && dish.barcode.toLowerCase().includes(searchTerm)));
+                      const isSellable = (dish.recipe && dish.recipe.length > 0) || (parseFloat(dish.price) > 0);
+                      const matchesCategory = categoryFilter === '' || dish.category === categoryFilter;
+                      return matchesSearch && matchesCategory && isSellable;
+                    });
+                    
+                    const cards = document.querySelectorAll('.menu-item[data-product-name]');
+                    const renderedNames = Array.from(cards).map(card => card.getAttribute('data-product-name'));
+                    const currentMenuNames = filteredMenu.map(dish => dish.name);
+                    
+                    const listsMatch = renderedNames.length === currentMenuNames.length && 
+                                       renderedNames.every((val, index) => val === currentMenuNames[index]);
+                    
+                    if (!listsMatch) {
+                      renderMenu();
+                    } else {
+                      updateMenuUI();
+                    }
+                    
                     // Update the menu total display
                     const totals = calculateTransactionTotals(activeOrders[CART_ID]?.items || []);
                     const menuTotalEl = document.getElementById('menuTotal');
@@ -7808,5 +7905,5 @@ Object.assign(window, {
   , toggleReportOptionsDropdown, changeReportZoom,
   
   // PRODUCTION: Monitoring & Debugging (Available in console)
-  getAppHealthStatus, exportErrorLog, captureError, getCachedQuery, getShopsPageOptimized, requestCache, errorLog
+  getAppHealthStatus, exportErrorLog, captureError, getCachedQuery, getShopsPageOptimized, requestCache, errorLog, clearImageFromCache
 });
