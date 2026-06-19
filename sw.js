@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yoshop-v22'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yoshop-v23'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',

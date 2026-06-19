@@ -990,6 +990,9 @@ function getEffectiveUid() {
 
     // 1. Stop current listeners and CLEAR local state to prevent data mixing between shops
     if (unsubscribeSync) unsubscribeSync();
+    // IMPORTANT: Reset isInitialLoadComplete so the backgrounding sync doesn't fire with empty state
+    // and overwrite the target shop's Firestore data before the real-time listener loads it
+    isInitialLoadComplete = false;
     menu = []; activeOrders = {}; transactions = []; staff = []; dishCategories = []; customers = []; units = []; restockHistory = [];
     
     // 2. Fetch and update local metadata to match the shop we are monitoring
@@ -2023,14 +2026,12 @@ function getEffectiveUid() {
               addToOrder(CART_ID, dish.name);
             };
             
-            // Add cache-buster to ensure the browser fetches a fresh version with CORS headers
+            // Use the dish image directly - do NOT append cache-busters to Firebase Storage
+            // URLs because Storage URLs are HMAC-signed and extra params break them
             let displayImage = dish.image || "https://placehold.co/100";
-            if (displayImage.startsWith('http') && navigator.onLine) {
-              displayImage += (displayImage.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
-            }
 
             item.innerHTML = `
-              <img src="${displayImage}" crossorigin="anonymous" alt="" onerror="this.removeAttribute('crossorigin'); this.src='https://placehold.co/100';">
+              <img src="${displayImage}" alt="" onerror="this.src='https://placehold.co/100';">
               <div class="menu-item-body">
                 <div class="menu-item-header">
                   <h4>${dish.name}</h4>
@@ -5872,20 +5873,39 @@ function getEffectiveUid() {
               // DEBOUNCE: Collect updates and apply them in batch to prevent UI thrashing
               if (updateTimer) clearTimeout(updateTimer);
               
+              // SAFE MERGE: Prefer cloud data only when it has actual content.
+              // Never let an empty/null cloud field overwrite non-empty local data.
+              // This prevents backgrounding sync races from wiping local state.
+              const safeArray = (cloudVal, localVal) => {
+                if (Array.isArray(cloudVal) && cloudVal.length > 0) return cloudVal;
+                if (Array.isArray(cloudVal) && cloudVal.length === 0 && Array.isArray(localVal) && localVal.length === 0) return cloudVal;
+                return Array.isArray(localVal) && localVal.length > 0 ? localVal : (cloudVal || localVal || []);
+              };
+              const safeObj = (cloudVal, localVal) => {
+                if (cloudVal && typeof cloudVal === 'object' && Object.keys(cloudVal).length > 0) return cloudVal;
+                return localVal || cloudVal || {};
+              };
               pendingUpdate = {
-                menu: cloudData.menu || menu,
-                activeOrders: cloudData.activeOrders || activeOrders,
-                settings: cloudData.settings || settings,
-                staff: cloudData.staff || staff,
-                dishCategories: cloudData.dishCategories || dishCategories,
-                customers: cloudData.customers || customers,
-                units: cloudData.units || units,
-                restockHistory: cloudData.restockHistory || restockHistory,
+                menu: safeArray(cloudData.menu, menu),
+                activeOrders: safeObj(cloudData.activeOrders, activeOrders),
+                settings: cloudData.settings ? { ...defaultSettings, ...cloudData.settings } : settings,
+                staff: safeArray(cloudData.staff, staff),
+                dishCategories: safeArray(cloudData.dishCategories, dishCategories),
+                customers: safeArray(cloudData.customers, customers),
+                units: safeArray(cloudData.units, units),
+                restockHistory: safeArray(cloudData.restockHistory, restockHistory),
                 appAdminSettings: {
                   ...defaultAppAdminSettings,
                   ...(cloudData.appAdminSettings || {})
                 }
               };
+              
+              // ANTI-DATA-LOSS GUARD: If cloud has significantly fewer menu items than
+              // current memory, it may be a stale/corrupted write. Log and skip.
+              if (menu.length > 0 && pendingUpdate.menu.length === 0) {
+                console.warn('[SYNC] ⚠️ Cloud has 0 menu items but local has', menu.length, '- skipping menu update to prevent data loss');
+                pendingUpdate.menu = menu;
+              }
               
               // Apply batched updates after 200ms to coalesce rapid changes
               updateTimer = setTimeout(async () => {
@@ -6186,16 +6206,17 @@ function getEffectiveUid() {
       }
       if (dishCatEl) dishCatEl.addEventListener('change', generateAutoBarcode);
 
-      // Instant Sync on Visibility Change
-      // Save immediately when app goes to background
+      // Save on visibility change (mobile app backgrounding/closing)
+      // SAFETY: Only force-sync if initial load is complete to avoid overwriting
+      // cloud data with an empty in-memory state during app startup
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-          console.log('[SYNC] 📵 App backgrounding - forcing immediate sync');
-          // Force immediate sync by clearing debounce
-          if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
-          syncDebounceTimer = null;
-          lastSyncTime = 0; // Reset to allow immediate sync
-          saveData();
+          if (isInitialLoadComplete) {
+            console.log('[SYNC] 📵 App backgrounding - saving data');
+            saveData();
+          } else {
+            console.log('[SYNC] 📵 App backgrounding - skipping sync (initial load not complete yet)');
+          }
         }
       });
       
@@ -6203,7 +6224,7 @@ function getEffectiveUid() {
       window.addEventListener('online', () => {
         const deviceId = new URLSearchParams(window.location.search).get('device') || '';
         console.log(`[SYNC] 🌐 Device ${deviceId || 'default'} back online - syncing all data`);
-        if (currentUser) {
+        if (currentUser && isInitialLoadComplete) {
           if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
           syncDebounceTimer = null;
           lastSyncTime = 0; // Reset to allow immediate sync
@@ -6223,13 +6244,6 @@ function getEffectiveUid() {
               updateDashboard();
             }, 100);
           }
-        }
-      });
-
-      // Save on visibility change (mobile app backgrounding/closing)
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-          saveData();
         }
       });
 
