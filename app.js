@@ -1682,20 +1682,41 @@ function getEffectiveUid() {
     }
   }
 
-  function showAppPopup({ title = 'Confirm', message = '', confirmText = 'Confirm', cancelText = 'Cancel', showCancel = true, input = null, allowOutsideClose = true }) {
+  function showAppPopup({ title = 'Confirm', message = '', confirmText = 'Confirm', cancelText = 'Cancel', showCancel = true, input = null, allowOutsideClose = true, icon = null, danger = false }) {
     const modal = document.getElementById('appPopupModal');
+    const card = modal.querySelector('.app-popup-card');
     const titleEl = document.getElementById('appPopupTitle');
     const messageEl = document.getElementById('appPopupMessage');
     const inputWrapper = document.getElementById('appPopupInputWrapper');
     const inputEl = document.getElementById('appPopupInput');
     const confirmBtn = document.getElementById('appPopupConfirm');
     const cancelBtn = document.getElementById('appPopupCancel');
+    const iconWrap = document.getElementById('appPopupIconWrap');
+    const iconEl = document.getElementById('appPopupIcon');
 
     titleEl.textContent = title;
     messageEl.textContent = message;
     confirmBtn.textContent = confirmText;
     cancelBtn.textContent = cancelText;
     cancelBtn.style.display = showCancel ? 'inline-flex' : 'none';
+
+    // Icon support
+    if (icon && iconWrap && iconEl) {
+      iconEl.textContent = icon;
+      iconWrap.style.display = 'flex';
+    } else if (iconWrap) {
+      iconWrap.style.display = 'none';
+    }
+
+    // Danger variant
+    if (card) {
+      card.classList.toggle('danger', !!danger);
+      if (danger) {
+        confirmBtn.style.background = '#dc3545';
+      } else {
+        confirmBtn.style.background = '';
+      }
+    }
 
     if (input && input.enabled) {
       inputWrapper.style.display = 'block';
@@ -2654,12 +2675,23 @@ function getEffectiveUid() {
     }
   }
 
-  function clearCurrentOrder() {
+  async function clearCurrentOrder() {
     const currentOrder = activeOrders[CART_ID];
     if (!currentOrder || currentOrder.items.length === 0) {
-      return alert("No active order to clear.");
+      return showAppAlert("There is no active order to clear.", "Nothing to Clear");
     }
-    if (confirm("Are you sure you want to clear the current order?")) {
+    const itemCount = currentOrder.items.reduce((sum, i) => sum + i.qty, 0);
+    const result = await showAppPopup({
+      title: 'Clear Order?',
+      message: `You have ${itemCount} item${itemCount !== 1 ? 's' : ''} in your current order.\n\nThis action cannot be undone.`,
+      confirmText: 'Yes, Clear It',
+      cancelText: 'Keep Order',
+      showCancel: true,
+      allowOutsideClose: true,
+      icon: '🗑️',
+      danger: true
+    });
+    if (result.confirmed) {
       delete activeOrders[CART_ID];
       updateOrders(CART_ID);
       updateMenuUI();

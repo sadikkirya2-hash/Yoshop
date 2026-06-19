@@ -206,14 +206,17 @@
   <!-- App Popup Modal -->
   <div id="appPopupModal" class="receipt-modal-overlay">
     <div class="receipt-modal-content app-popup-card">
+      <div id="appPopupIconWrap" class="app-popup-icon-wrap" style="display:none;">
+        <span id="appPopupIcon" class="app-popup-icon"></span>
+      </div>
       <h3 id="appPopupTitle">Confirm Action</h3>
       <p id="appPopupMessage">Are you sure you want to continue?</p>
       <div id="appPopupInputWrapper" class="app-popup-input-wrapper" style="display:none;">
         <input id="appPopupInput" class="app-popup-input" type="text" placeholder="Enter value">
       </div>
       <div class="receipt-actions app-popup-actions">
-        <button class="btn" id="appPopupCancel">Cancel</button>
-        <button class="btn btn-success" id="appPopupConfirm">Confirm</button>
+        <button class="btn app-popup-btn-cancel" id="appPopupCancel">Cancel</button>
+        <button class="btn btn-success app-popup-btn-confirm" id="appPopupConfirm">Confirm</button>
       </div>
     </div>
   </div>

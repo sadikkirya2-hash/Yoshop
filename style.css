@@ -552,41 +552,139 @@
     font-size: 13px;
     line-height: 1.5;
   }
+  /* ===== Custom App Popup Modal ===== */
+  @keyframes popupFadeIn {
+    from { opacity: 0; transform: scale(0.92) translateY(16px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  #appPopupModal[style*="flex"] {
+    animation: overlayFadeIn 0.18s ease;
+  }
+
   .app-popup-card {
-    background: var(--surface, #fff);
+    background: var(--card, #fff);
     color: var(--text, #111);
-    padding: 24px;
-    border-radius: 18px;
+    padding: 28px 28px 22px;
+    border-radius: 20px;
     width: min(420px, 92%);
     max-width: 420px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.18);
+    box-shadow:
+      0 2px 6px rgba(0,0,0,0.06),
+      0 10px 30px rgba(0,0,0,0.14),
+      0 30px 60px rgba(0,0,0,0.10);
+    border: 1px solid var(--border-color, rgba(0,0,0,0.07));
+    animation: popupFadeIn 0.22s cubic-bezier(0.34, 1.26, 0.64, 1);
   }
+
+  /* Icon wrap */
+  .app-popup-icon-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(220, 53, 69, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 18px 0;
+  }
+  .app-popup-icon {
+    font-size: 30px;
+    line-height: 1;
+  }
+
   .app-popup-card h3 {
-    margin: 0 0 12px;
-    font-size: 1.2rem;
+    margin: 0 0 8px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
   }
   .app-popup-card p {
-    margin: 0 0 18px;
-    line-height: 1.6;
+    margin: 0 0 22px;
+    line-height: 1.65;
     color: var(--text-muted, #666);
+    font-size: 0.97rem;
     white-space: pre-wrap;
   }
+  body.dark-mode .app-popup-card p {
+    color: rgba(255,255,255,0.6);
+  }
+
   .app-popup-input-wrapper {
     margin-bottom: 18px;
   }
   .app-popup-input {
     width: 100%;
-    padding: 14px 16px;
+    padding: 12px 14px;
     font-size: 1rem;
     border-radius: 12px;
-    border: 1px solid rgba(0,0,0,0.16);
-    background: var(--input-bg, #f9f9fb);
+    border: 1.5px solid var(--border-color, rgba(0,0,0,0.16));
+    background: var(--bg, #f9f9fb);
     color: var(--text, #111);
+    transition: border-color 0.2s;
+    box-sizing: border-box;
   }
   .app-popup-input:focus {
     outline: none;
     border-color: var(--primary, #1976d2);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 248,44,51), 0.12);
   }
+
+  .app-popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 0;
+    flex-wrap: wrap;
+  }
+
+  /* Cancel button – ghost style */
+  .app-popup-btn-cancel {
+    background: transparent !important;
+    color: var(--text, #333) !important;
+    border: 1.5px solid var(--border-color, #ddd) !important;
+    border-radius: 10px !important;
+    padding: 10px 20px !important;
+    font-weight: 600;
+    transition: background 0.18s, border-color 0.18s !important;
+  }
+  .app-popup-btn-cancel:hover {
+    background: var(--bg, #f5f5f5) !important;
+    border-color: #bbb !important;
+  }
+
+  /* Confirm button – filled with danger colour for destructive actions */
+  .app-popup-btn-confirm {
+    border-radius: 10px !important;
+    padding: 10px 20px !important;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: transform 0.12s, box-shadow 0.12s !important;
+  }
+  .app-popup-btn-confirm:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(220,53,69,0.35);
+  }
+  .app-popup-btn-confirm:active {
+    transform: translateY(0);
+  }
+
+  /* Danger variant applied via JS */
+  .app-popup-card.danger .app-popup-icon-wrap {
+    background: rgba(220, 53, 69, 0.1);
+  }
+  .app-popup-card.danger .app-popup-btn-confirm {
+    background: #dc3545 !important;
+  }
+  .app-popup-card.danger .app-popup-btn-confirm:hover {
+    background: #c82333 !important;
+    box-shadow: 0 4px 14px rgba(220,53,69,0.4);
+  }
+
   .app-popup-actions { justify-content: flex-end; gap: 10px; }
   .receipt-header { text-align: center; margin-bottom: 10px; }
   .receipt-header .logo { font-size: 40px; margin-bottom: 10px; }
