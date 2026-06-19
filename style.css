@@ -1233,8 +1233,31 @@
   border-radius: 12px; /* Rounded corners */
   box-shadow: 0 4px 12px rgba(0,0,0,0.08); /* Subtle shadow */
   border: 1px solid var(--border-color); /* Light border */
-  padding: 15px 20px; /* More padding */
+  padding: 10px 15px; /* Reduced from 15px 20px */
   margin-bottom: 10px;
+}
+
+#menuOrderSummary .total {
+  font-size: 0.9em; /* Reduced from 1.2em */
+  margin-top: 0; /* Remove top margin */
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+#menuOrderSummary .currency-symbol {
+  font-size: 0.85em; /* Make currency symbol slightly smaller */
+}
+
+#menuOrderSummary .btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
 }
 
 .menu-search-row {
@@ -1255,13 +1278,27 @@
 
 
 .camera-scan-btn {
-  margin: 0 5px;
-  padding: 8px 12px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 1.1em;
 }
 
 .manual-barcode-btn {
-  margin: 0 5px;
-  padding: 8px 12px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 1.1em;
 }
 
 /* Table Orders */
@@ -1270,7 +1307,7 @@
 }
 
 #menuTotal {
-  font-size: 1.15em; /* Balanced size to match professional category titles */
+  font-size: 1.0em; /* Reduced from 1.15em */
   font-weight: bold; /* Make it bold */
   color: var(--primary); /* Use primary color for emphasis */
 }
