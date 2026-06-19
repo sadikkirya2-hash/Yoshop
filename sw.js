@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yoshop-v23'; // Increment this version number whenever you make changes!
+const CACHE_NAME = 'yoshop-v22'; // Increment this version number whenever you make changes!
 const urlsToCache = [
   '/',
   '/index.html',
@@ -104,23 +104,6 @@ self.addEventListener('activate', (event) => {
     }).then(() => {
       // Take control of all clients immediately
       return self.clients.claim();
-    })
-  );
-});
-
-// Handle notification click to open/focus PWA window
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow('/');
-      }
     })
   );
 });

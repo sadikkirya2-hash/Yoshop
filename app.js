@@ -3045,25 +3045,11 @@ function getEffectiveUid() {
     const receiptContentEl = document.getElementById('receiptContent');
     const { jsPDF } = window.jspdf;
 
-    // Clone receiptContentEl and style it offscreen with visible styling
-    // so html2canvas can capture it even when the receiptModal overlay is hidden.
-    const clone = receiptContentEl.cloneNode(true);
-    clone.style.width = '380px';
-    clone.style.position = 'absolute';
-    clone.style.left = '-9999px';
-    clone.style.top = '0';
-    clone.style.padding = '35px 20px';
-    clone.style.background = 'white';
-    clone.style.color = 'black';
-    clone.style.fontFamily = "'Courier New', Courier, monospace";
-    document.body.appendChild(clone);
-
     try {
-        const canvas = await html2canvas(clone, {
+        const canvas = await html2canvas(receiptContentEl, {
             scale: 2, // Increase scale for better quality
             useCORS: true // Important for external images
         });
-        document.body.removeChild(clone);
 
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
@@ -3071,21 +3057,10 @@ function getEffectiveUid() {
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        
-        // Open PDF in a new tab for "View PDF" functionality
-        const pdfBlob = pdf.output('blob');
-        const blobUrl = URL.createObjectURL(pdfBlob);
-        const newWindow = window.open(blobUrl, '_blank');
-        
-        // If popup blocker prevents opening, fallback to saving/downloading the file directly
-        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-            pdf.save(`receipt-${Date.now()}.pdf`);
-        }
+        pdf.save(`receipt-${Date.now()}.pdf`);
+
     } catch (error) {
         console.error("Error generating PDF:", error);
-        if (clone.parentNode) {
-            document.body.removeChild(clone);
-        }
         alert("Could not generate PDF. There might be an issue with the receipt content.");
     }
   }
