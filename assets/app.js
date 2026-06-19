@@ -866,6 +866,18 @@ const analytics = getAnalytics(app);
     updateDashboard(); // Add this line to update dashboard cards in real-time
   }
 
+  function clearCurrentOrder() {
+    const currentOrder = activeOrders[CART_ID];
+    if (!currentOrder || currentOrder.items.length === 0) {
+      return alert("No active order to clear.");
+    }
+    if (confirm("Are you sure you want to clear the current order?")) {
+      delete activeOrders[CART_ID];
+      updateOrders(CART_ID);
+      updateMenuUI();
+    }
+  }
+
   function processBill() { // This now opens the payment modal
     const currentOrder = activeOrders[CART_ID];
     if (!currentOrder || currentOrder.items.length === 0) {
@@ -3621,7 +3633,7 @@ Object.assign(window, {
   addNewRecipeItemFromForm, updateRecipeItemUnit, updateRecipeTotals,
   previewDishImage, toggleAddDishForm, openBillSplitModal, closeSplitBillModal,
   addSplitBill, removeSplitBill, moveItemToFirstBill, moveItemToUnassigned,
-  processSplitPayments, addToOrder, decreaseQty, processBill, updatePaymentTotals,
+  processSplitPayments, addToOrder, decreaseQty, processBill, clearCurrentOrder, updatePaymentTotals,
   toggleCashPaymentFields, calculateChange, finalizePayment, printDishLabel,
   deleteItem, previewOrder, downloadCurrentReceiptAsPDF, shareReceipt,
   handleServerChange, printReceipt, connectUSBScanner, connectBluetoothScanner,
