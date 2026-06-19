@@ -7007,33 +7007,84 @@ function getEffectiveUid() {
     }
   });
 
+  // ===== Scan Sound (Web Audio API — no external files needed) =====
+  let _scanAudioCtx = null;
+
+  function playScanSound(type = 'success') {
+    try {
+      if (!_scanAudioCtx) {
+        _scanAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = _scanAudioCtx;
+
+      // Resume context if suspended (browser autoplay policy)
+      if (ctx.state === 'suspended') ctx.resume();
+
+      if (type === 'success') {
+        // Two-tone ascending beep — classic scanner "got it" sound
+        const frequencies = [1046, 1318]; // C6 → E6
+        frequencies.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.07);
+          gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.07);
+          gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + i * 0.07 + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.07 + 0.12);
+          osc.start(ctx.currentTime + i * 0.07);
+          osc.stop(ctx.currentTime + i * 0.07 + 0.13);
+        });
+      } else {
+        // Short low buzz — "not found" warning
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.23);
+      }
+    } catch (e) {
+      // Silently fail if Web Audio is unavailable
+      console.warn('playScanSound: Web Audio API unavailable', e);
+    }
+  }
+
   function handleBarcodeScan(code) {
     // 1. Check if in Settings -> Test
     const testInput = document.getElementById('scannerTestInput');
     if (testInput && document.activeElement === testInput) {
         document.getElementById('lastScannedCode').textContent = code;
-        testInput.value = code; 
+        testInput.value = code;
+        playScanSound('success');
         return;
     }
 
     // 2. Check if in Menu Tab -> Add to Order
     if (document.getElementById('menuTab').classList.contains('active')) {
         // Search by barcode property first, then fallback to name
-        const dish = menu.find(d => (d.barcode && d.barcode === code) || d.name === code); 
+        const dish = menu.find(d => (d.barcode && d.barcode === code) || d.name === code);
         if (dish) {
             addToOrder(CART_ID, dish.name);
-            // Optional: Play a beep sound here
+            playScanSound('success');
         } else {
+            playScanSound('error');
             alert(`Item with barcode "${code}" not found in menu.`);
         }
     }
-    
+
     // 3. Check if in Stock/Dishes Tab -> Search
     if (document.getElementById('stockTab').classList.contains('active')) {
         const searchInput = document.getElementById('stockSearchInput');
         if (searchInput) {
             searchInput.value = code;
             renderStockListTable();
+            playScanSound('success');
         }
     }
   }
