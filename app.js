@@ -1849,6 +1849,10 @@ function getEffectiveUid() {
     return showAppPopup({ title, message, confirmText: 'OK', cancelText: 'Cancel', showCancel: false, input: null });
   }
 
+  function showSuccessPopup(message, title = 'Success') {
+    return showAppPopup({ title, message, confirmText: 'OK', cancelText: 'Cancel', showCancel: false, icon: '✅' });
+  }
+
   async function submitAuthAction() {
     const curPassValue = document.getElementById('authCurrentPassword').value;
     const newPassValue = document.getElementById('authNewPassword').value;
@@ -2030,6 +2034,30 @@ function getEffectiveUid() {
   }
 
   // ===== Menu =====
+  /**
+   * Event delegation handler for all menu quantity buttons.
+   * Handles both decrease (-) and increase (+) button clicks via event bubbling.
+   * This ensures consistent behavior for all products, old and new.
+   */
+  function handleMenuButtonClick(event) {
+    const btn = event.target;
+    if (!btn.matches('.qty-decrease-btn, .qty-increase-btn')) return;
+
+    event.stopPropagation(); // Prevent bubbling to card click handler
+
+    const card = btn.closest('.menu-item');
+    if (!card) return;
+
+    const productName = card.getAttribute('data-product-name');
+    if (!productName) return;
+
+    if (btn.classList.contains('qty-decrease-btn')) {
+      decreaseQty(CART_ID, productName);
+    } else if (btn.classList.contains('qty-increase-btn')) {
+      addToOrder(CART_ID, productName);
+    }
+  }
+
   function renderMenu() {
     const container = document.getElementById('menuCategories');
     container.innerHTML = '';
@@ -2097,16 +2125,22 @@ function getEffectiveUid() {
                 </div>
                 <p class="stock-status ${isOutOfStock ? 'out-of-stock' : 'in-stock'}">Available: ${availableStock}</p>
                 <div class="item-controls">
-                  <button onclick="decreaseQty('${CART_ID}', '${dish.name}')" ${quantity === 0 ? 'disabled' : ''}>-</button>
+                  <button type="button" class="qty-decrease-btn" ${quantity === 0 ? 'disabled' : ''}>-</button>
                   <span class="qty-display">${quantity}</span>
-                  <button onclick="addToOrder('${CART_ID}', '${dish.name}')" ${isOutOfStock ? 'disabled' : ''}>+</button>
+                  <button type="button" class="qty-increase-btn" ${isOutOfStock ? 'disabled' : ''}>+</button>
                 </div>
               </div>`;
+
             grid.appendChild(item);
           });
       catDiv.appendChild(grid);
       container.appendChild(catDiv);
     });
+
+    // Set up event delegation for quantity buttons on the container
+    // This ensures ALL buttons (old and new) respond consistently
+    container.removeEventListener('click', handleMenuButtonClick);
+    container.addEventListener('click', handleMenuButtonClick);
 
     // Initial orders sync
     updateOrders(CART_ID, false);
@@ -2125,12 +2159,9 @@ function getEffectiveUid() {
       const dish = menu.find(d => d.name === name);
       if (!dish) return;
 
-      // Surgically update the image if it changed
-      const img = card.querySelector('img');
-      const expectedImg = dish.image || "https://placehold.co/100";
-      if (img && img.getAttribute('src') !== expectedImg) {
-        img.src = expectedImg;
-      }
+      // REMOVED image src update - Images should NOT be updated when quantity changes.
+      // Image is set once during initial render in renderMenu() and should remain static.
+      // Updating img.src causes browser re-fetch/re-render, triggering visual flash.
 
       // Surgically update the price if it changed
       const priceEl = card.querySelector('.menu-item-header p');
@@ -5675,7 +5706,7 @@ function getEffectiveUid() {
     }
   }
 
-  function saveStockAdjustment() {
+  async function saveStockAdjustment() {
     const index = document.getElementById('stockItemIndex').value;
     const newStockInput = document.getElementById('newStockValue');
     const newStock = parseInt(newStockInput.value, 10);
@@ -5721,14 +5752,15 @@ function getEffectiveUid() {
     });
     if (restockHistory.length > 100) restockHistory.pop();
 
-    saveData();
+    await saveData();
 
-    // Re-render all relevant views
+    // Re-render only the relevant views and avoid rebuilding the whole menu
     toggleStockAdjustmentForm(false); // Hide form
     renderStockListTable();
     renderInventoryReport();
     renderDishesTable();
-    renderMenu();
+    updateMenuUI();
+    await showSuccessPopup(`Stock updated for "${menu[index].name}" successfully.`);
   }
 
   function toggleNewStockItemForm(show) {
@@ -5751,7 +5783,7 @@ function getEffectiveUid() {
     unitSelect.innerHTML = `<option value="" disabled selected>Select Unit</option>` + units.map(u => `<option value="${u.short}">${u.short}</option>`).join('');
   }
 
-  function saveNewStockItem() {
+  async function saveNewStockItem() {
     const name = document.getElementById('newStockItemName').value.trim();
     const unit = document.getElementById('newStockItemUnit').value;
     const costPrice = parseFloat(document.getElementById('newStockItemCost').value);
@@ -5772,8 +5804,10 @@ function getEffectiveUid() {
     }
 
     const itemIndex = document.getElementById('newStockItemFormContainer').dataset.editingIndex;
+    const isEdit = itemIndex !== undefined && itemIndex !== '';
+    const normalizedStock = Number.isNaN(stock) ? 0 : stock;
 
-    if (itemIndex) {
+    if (isEdit) {
       // Update existing item
       const index = parseInt(itemIndex, 10);
       const item = menu[index];
@@ -5782,13 +5816,10 @@ function getEffectiveUid() {
       item.name = name;
       item.unit = unit;
       item.costPrice = costPrice;
-      item.stock = stock;
+      item.stock = normalizedStock;
 
-      // If name changed, update all recipes and active orders to keep the app working perfectly
       if (oldName !== name) {
-          // Identify which products will be affected by this rename
           const affectedProducts = menu.filter(d => d.recipe && d.recipe.some(c => c.itemName === oldName)).map(d => d.name);
-          
           if (affectedProducts.length > 0) {
               const confirmRename = confirm(`Renaming "${oldName}" to "${name}" will automatically update recipes for the following products:\n\n${affectedProducts.join('\n')}\n\nDo you want to proceed?`);
               if (!confirmRename) return;
@@ -5813,13 +5844,18 @@ function getEffectiveUid() {
       if (sellingPriceInput && !isNaN(parseFloat(sellingPriceInput))) {
           item.price = parseFloat(sellingPriceInput);
       } else {
-          // Recalculate price based on markup in case cost changed
           item.price = costPrice * (1 + ((settings.defaultMarkup || 200) / 100));
       }
-      alert(`Item "${name}" updated successfully.`);
+
+      await saveData();
+      toggleNewStockItemForm(false);
+      renderStockListTable();
+      renderInventoryReport();
+      renderDishesTable();
+      updateMenuUI();
+      await showSuccessPopup(`Item "${name}" updated successfully.`);
     } else {
       // Add new item
-      // It's a primary ingredient, so calculate its selling price based on markup
       let price;
       if (sellingPriceInput && !isNaN(parseFloat(sellingPriceInput))) {
           price = parseFloat(sellingPriceInput);
@@ -5829,30 +5865,31 @@ function getEffectiveUid() {
       }
       const newItem = {
         name,
-        category: null, // No default category
+        category: null,
         costPrice,
-        stock,
+        stock: normalizedStock,
         unit,
         price,
-        image: "https://placehold.co/100" // Default placeholder
+        image: "https://placehold.co/100"
       };
 
       restockHistory.unshift({
         date: new Date().toISOString(),
         itemName: name,
-        adjustment: stock,
-        newTotal: stock,
+        adjustment: normalizedStock,
+        newTotal: normalizedStock,
         note: 'Initial Stock'
       });
-    menu.push(newItem);
-    alert(`Item "${name}" added successfully.`);
-    }
+      menu.push(newItem);
 
-    saveData();
-    toggleNewStockItemForm(false);
-    renderStockListTable();
-    renderMenu();
-    renderDishesTable();
+      await saveData();
+      toggleNewStockItemForm(false);
+      renderStockListTable();
+      renderInventoryReport();
+      renderDishesTable();
+      renderMenu();
+      await showSuccessPopup(`Item "${name}" added successfully.`);
+    }
   }
 
   /**

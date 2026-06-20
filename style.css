@@ -352,8 +352,10 @@
     flex-direction: column;
     overflow: hidden;
     text-align: center;
-    transition: box-shadow 0.2s;
+    /* REMOVED transition: box-shadow 0.2s; - Prevents image pulsing when JS updates active state */
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    will-change: auto;
+    contain: layout;
   }
   .menu-item.active {
     border-color: var(--primary);
@@ -380,7 +382,7 @@
     border-radius: 6px;
     padding: 6px 10px;
     cursor: pointer;
-    transition: 0.2s;
+    transition: none; /* DISABLED - Prevent visual artifacts during rapid updates */
   }
   .menu-item button:hover { background: var(--primary-hover); }
   .menu-item p {
@@ -393,6 +395,8 @@
     object-fit: cover; /* This ensures the image covers the area without distortion */
     border-radius: 8px 8px 0 0;
     display: block;
+    animation: none !important; /* CRITICAL: Disable ALL animations on images to prevent pulsing */
+    transition: none !important; /* Disable transitions to prevent flashing */
   }
 
   /* Responsive adjustments for larger screens */
@@ -459,7 +463,7 @@
     line-height: 26px; /* Adjust for better vertical centering */
     font-weight: bold;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    transition: all 0.1s ease-out;
+    transition: none; /* DISABLED - Prevent visual artifacts during rapid JS updates */
   }
   .item-controls button:active {
     transform: translateY(1px);
