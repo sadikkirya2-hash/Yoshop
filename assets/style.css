@@ -654,6 +654,34 @@
     transition: background-color 0.2s;
   }
 
+  .table-actions-cell {
+    white-space: normal;
+    width: auto;
+  }
+  .table-actions-cell .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 1px;
+    border-radius: 6px;
+  }
+  .table-actions-cell .icon-btn:hover {
+    background: rgba(255, 107, 53, 0.08);
+  }
+
+  @media (max-width: 600px) {
+    .table-actions-cell {
+      min-width: 0;
+    }
+    .table-actions-cell .icon-btn {
+      width: 26px;
+      height: 26px;
+    }
+  }
+
   /* Media query for smaller screens */
   @media (max-width: 480px) {
     .menu-grid, #tablesGrid {
