@@ -3,9 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>YoShop</title>
 <link rel="icon" type="image/png" href="assets/icons/android192x192.png"> <!-- Using android192x192.png as the default favicon -->
 <link rel="canonical" href="https://yoshop.netlify.app/"> <!-- Updated canonical URL -->
+<link rel="stylesheet" href="style.css?v=20260620">
 <script>
   const previewTunnel = location.hostname.endsWith('.github.dev') || location.hostname.endsWith('.app.github.dev');
   if (!previewTunnel) {
@@ -41,8 +45,7 @@
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
-<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js?v=20260620"></script>
 </head>
 <body class="loading">
   <!-- Splash Screen -->
@@ -850,6 +853,4 @@
     </div>
   </div>
 
-<!-- Change your script tag to include type="module" -->
-<script type="module" src="app.js"></script>
 </body>

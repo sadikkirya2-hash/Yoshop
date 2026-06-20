@@ -5932,6 +5932,34 @@ function getEffectiveUid() {
 
   // ===== Real-Time Cloud Sync =====
   let unsubscribeSync = null;
+  let lastRemoteDataHash = '';
+  let cloudSyncChannel = null;
+  const cloudSyncChannelName = 'yoshop-cloud-sync';
+
+  function getCloudDataHash(data) {
+    if (!data) return '';
+    return JSON.stringify({
+      lastUpdated: data.lastUpdated || '',
+      menuCount: Array.isArray(data.menu) ? data.menu.length : 0,
+      activeOrdersCount: data.activeOrders && typeof data.activeOrders === 'object' ? Object.keys(data.activeOrders).length : 0,
+      settings: data.settings || {},
+      staffCount: Array.isArray(data.staff) ? data.staff.length : 0,
+      customerCount: Array.isArray(data.customers) ? data.customers.length : 0,
+      categoryCount: Array.isArray(data.dishCategories) ? data.dishCategories.length : 0,
+      unitsCount: Array.isArray(data.units) ? data.units.length : 0,
+      restockCount: Array.isArray(data.restockHistory) ? data.restockHistory.length : 0,
+      appAdminSettings: data.appAdminSettings || {}
+    });
+  }
+
+  function notifyOtherTabsAboutCloudChange(targetUid) {
+    if (cloudSyncChannel) {
+      cloudSyncChannel.postMessage({
+        type: 'YOSHOP_CLOUD_CHANGED',
+        uid: targetUid
+      });
+    }
+  }
 
   /**
    * Sets up real-time listener for cross-device/cross-tab synchronization
@@ -5949,6 +5977,20 @@ function getEffectiveUid() {
       unsubscribeTransactionsSync();
       unsubscribeTransactionsSync = null;
     }
+
+    if ('BroadcastChannel' in window && !cloudSyncChannel) {
+      cloudSyncChannel = new BroadcastChannel(cloudSyncChannelName);
+      cloudSyncChannel.onmessage = (event) => {
+        if (event.data && event.data.type === 'YOSHOP_CLOUD_CHANGED' && event.data.uid === uid) {
+          console.log('📡 [SYNC] Broadcast refresh requested by another tab');
+          if (typeof loadTransactionsFromCloud === 'function') {
+            loadTransactionsFromCloud(uid);
+          }
+          refreshCurrentView();
+          updateDashboard();
+        }
+      };
+    }
     
     try {
       console.log('🟢 [SYNC] Setting up real-time listener for cross-device sync...');
@@ -5964,12 +6006,19 @@ function getEffectiveUid() {
         (docSnap) => {
           if (docSnap.exists()) {
             const cloudData = docSnap.data();
+            const cloudHash = getCloudDataHash(cloudData);
             
             // Only update if changes come from the cloud (server)
             // hasPendingWrites = true means this is our local change being reflected
             // hasPendingWrites = false means this is an update from another device
             if (!docSnap.metadata.hasPendingWrites) {
-              console.log('🔄 [SYNC] ✅ Real-time update from cloud (from another device/tab)');
+              const isNewRemoteData = cloudHash !== lastRemoteDataHash;
+              lastRemoteDataHash = cloudHash;
+
+              if (isNewRemoteData) {
+                console.log('🔄 [SYNC] ✅ Immediate refresh triggered by new cloud data');
+                notifyOtherTabsAboutCloudChange(uid);
+              }
               
               // DEBOUNCE: Collect updates and apply them in batch to prevent UI thrashing
               if (updateTimer) clearTimeout(updateTimer);
@@ -6008,7 +6057,9 @@ function getEffectiveUid() {
                 pendingUpdate.menu = menu;
               }
               
-              // Apply batched updates after 200ms to coalesce rapid changes
+              // Apply batched updates as soon as new remote data is detected.
+              // This is intentionally faster so other devices feel instant.
+              const applyDelay = isNewRemoteData ? 50 : 200;
               updateTimer = setTimeout(async () => {
                 try {
                   // Identify and clear changed images/logos from cache
@@ -6046,37 +6097,8 @@ function getEffectiveUid() {
                   // Persist cloud data to local IndexedDB only (skip cloud push to avoid loops)
                   await saveData(false); 
 
-                  // Surgically update the UI if we're on the Shop tab to prevent "shaking"
-                  const activeTab = document.querySelector('section.active');
-                  if (activeTab && activeTab.id === 'menuTab') {
-                    // Check if the menu items or categories structurally changed (e.g. rename, add, delete)
-                    const searchTerm = document.getElementById('menuSearch')?.value.toLowerCase() || '';
-                    const categoryFilter = document.getElementById('categoryFilter')?.value || '';
-                    const filteredMenu = menu.filter(dish => {
-                      const matchesSearch = dish.category && (dish.name.toLowerCase().includes(searchTerm) || (dish.barcode && dish.barcode.toLowerCase().includes(searchTerm)));
-                      const isSellable = (dish.recipe && dish.recipe.length > 0) || (parseFloat(dish.price) > 0);
-                      const matchesCategory = categoryFilter === '' || dish.category === categoryFilter;
-                      return matchesSearch && matchesCategory && isSellable;
-                    });
-                    
-                    const cards = document.querySelectorAll('.menu-item[data-product-name]');
-                    const renderedNames = Array.from(cards).map(card => card.getAttribute('data-product-name'));
-                    const currentMenuNames = filteredMenu.map(dish => dish.name);
-                    
-                    const listsMatch = renderedNames.length === currentMenuNames.length && 
-                                       renderedNames.every((val, index) => val === currentMenuNames[index]);
-                    
-                    if (!listsMatch) {
-                      renderMenu();
-                    } else {
-                      updateMenuUI();
-                    }
-                    
-                    // Update the menu total display
-                    const totals = calculateTransactionTotals(activeOrders[CART_ID]?.items || []);
-                    const menuTotalEl = document.getElementById('menuTotal');
-                    if (menuTotalEl) menuTotalEl.textContent = formatCurrency(totals.total);
-                  } else {
+                  // Force a complete refresh of the current view so changes show immediately
+                  if (document.querySelector('section.active')) {
                     refreshCurrentView();
                   }
                   updateDashboard();
@@ -6099,7 +6121,7 @@ function getEffectiveUid() {
                 } catch (error) {
                   captureError('SYNC_UPDATE', error, { uid });
                 }
-              }, 200); // OPTIMIZATION: 200ms debounce prevents UI thrashing
+              }, applyDelay);
             } else {
               console.log('📤 [SYNC] Local changes acknowledged by cloud');
             }
