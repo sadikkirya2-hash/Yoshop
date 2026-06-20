@@ -1,5 +1,6 @@
 /* Extracted styles from index.html */
 :root {
+    --card-image-height: 150px; /* Global variable for card image height */
     --primary-light: #ff6b35;
     --primary-hover-light: #ff854f;
     --bg-light: #f0f2f5;
@@ -386,7 +387,7 @@
   }
   .menu-item img {
     width: 100%;
-    height: 150px;
+    height: var(--card-image-height);
     object-fit: cover; /* This ensures the image covers the area without distortion */
     border-radius: 8px 8px 0 0;
     display: block;
@@ -415,6 +416,15 @@
     justify-content: center;
     gap: 10px;
     margin-top: 5px;
+  }
+
+  /* On small screens stack action buttons vertically for easier tapping */
+  @media (max-width: 600px) {
+    .item-controls {
+      flex-direction: column;
+      gap: 6px;
+    }
+    .item-controls button { width: 36px; height: 36px; }
   }
   .item-controls button {
     background: var(--primary);

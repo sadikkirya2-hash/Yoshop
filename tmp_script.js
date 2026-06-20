@@ -24,7 +24,7 @@
       };
 
       request.onblocked = () => {
-        alert('Database is blocked. Please close other tabs of this app and refresh.');
+        if (typeof showAppAlert === 'function') showAppAlert('Database is blocked. Please close other tabs of this app and refresh.');
         reject('DB_BLOCKED');
       };
 
@@ -92,7 +92,7 @@
       ]);
     } catch (error) {
       console.error("Failed to save data to IndexedDB:", error);
-      alert("Error: Could not save data. Your changes might not persist.");
+      if (typeof showAppAlert === 'function') showAppAlert("Error: Could not save data. Your changes might not persist.");
     }
   }
 
@@ -109,7 +109,10 @@
       location.reload();
     } catch (error) {
       console.error("Failed to save data before refresh:", error);
-      if (confirm("Could not save data before refreshing. You may lose unsaved changes. Do you still want to refresh?")) {
+      if (typeof showAppConfirm === 'function') {
+        const resp = await showAppConfirm("Could not save data before refreshing. You may lose unsaved changes. Do you still want to refresh?");
+        if (resp && resp.confirmed) location.reload();
+      } else if (confirm("Could not save data before refreshing. You may lose unsaved changes. Do you still want to refresh?")) {
         location.reload();
       }
     }
@@ -212,7 +215,7 @@
 
             item.className = itemClasses;
             item.onclick = (e) => { // Allow adding item by clicking the card
-              if (isOutOfStock) return alert("Item is out of stock.");
+              if (isOutOfStock) return (typeof showAppAlert === 'function') ? showAppAlert("Item is out of stock.") : alert("Item is out of stock.");
               if (e.target.closest('.item-controls')) return;
               addToOrder(CART_ID, dish.name);
             };
@@ -282,11 +285,11 @@
     const imageInput = document.getElementById('dishImage');
 
     if (!name) {
-      return alert("Please enter a valid name.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("Please enter a valid name.") : alert("Please enter a valid name.");
     }
 
     if (!category) {
-      return alert("Please select a category for the dish.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("Please select a category for the dish.") : alert("Please select a category for the dish.");
     }
 
     if (buttonElement) {
@@ -353,7 +356,7 @@
       toggleAddDishForm(false); // Hide form on save
     } catch (error) {
       console.error("Error adding dish:", error);
-      alert("Failed to save dish: " + error.message);
+      if (typeof showAppAlert === 'function') showAppAlert("Failed to save dish: " + error.message);
     } finally {
       if (buttonElement) {
         buttonElement.disabled = false;
@@ -408,7 +411,7 @@
     if (!ingredient) return; 
 
     if (ingredient.stock !== undefined && ingredient.stock <= 0) {
-      alert(`"${ingredient.name}" is out of stock. Please add this item to your stock before using it in a recipe.`);
+      if (typeof showAppAlert === 'function') showAppAlert(`"${ingredient.name}" is out of stock. Please add this item to your stock before using it in a recipe.`);
       return;
     }
     
@@ -542,7 +545,7 @@
         hiddenInput.value = base64; // Save base64 immediately to avoid re-reading file
       }).catch(e => {
         console.error(e);
-        alert("Could not preview image: " + e.message);
+        if (typeof showAppAlert === 'function') showAppAlert("Could not preview image: " + e.message);
         input.value = ''; // Clear input
         preview.src = 'https://placehold.co/100';
       });
@@ -597,7 +600,7 @@
   function openBillSplitModal() {
     const currentOrder = activeOrders[CART_ID];
     if (!currentOrder || currentOrder.items.length === 0) {
-      return alert("No active order to split.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("No active order to split.") : alert("No active order to split.");
     }
     document.getElementById('splitBillTableId').textContent = "Current Order";
 
@@ -689,7 +692,7 @@
 
   async function processSplitPayments() {
     if (splitState.unassigned.length > 0) {
-      return alert("Please assign all items before processing payments.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("Please assign all items before processing payments.") : alert("Please assign all items before processing payments.");
     }
 
     const serverName = activeOrders[CART_ID].server || 'N/A';
@@ -718,7 +721,7 @@
         bill.items.forEach(item => deductStock(item.name, item.qty));
         document.getElementById('paymentModal').style.display = 'none';
       } else {
-        alert("Payment cancelled. Remaining split bills will not be processed.");
+        if (typeof showAppAlert === 'function') showAppAlert("Payment cancelled. Remaining split bills will not be processed.");
         saveData(); // Save any payments that were processed
         return; // Exit the loop
       }
@@ -730,7 +733,7 @@
     renderMenu();
     updateDashboard();
     document.getElementById('servedBy').value = '';
-    alert(`All split payments processed successfully!`);
+    if (typeof showAppAlert === 'function') showAppAlert(`All split payments processed successfully!`);
   }
 
   // ===== Orders =====
@@ -740,20 +743,31 @@
     }
 
     const dish = menu.find(d => d.name === name);
-    if (!dish) return alert("Item not found.");
+    if (!dish) return (typeof showAppAlert === 'function') ? showAppAlert("Item not found.") : alert("Item not found.");
 
     // If notes are being added, we always create a new item.
     if (notes !== null) {
-        const note = prompt(`Add special requests for ${name}:`, "");
-        if (note !== null) { // prompt not cancelled
-            // Add as a new line item with a unique ID
+      if (typeof showAppPrompt === 'function') {
+        showAppPrompt(`Add special requests for ${name}:`, 'Add special requests', '', '').then(note => {
+          if (note !== null) {
             activeOrders[cartId].items.push({ ...dish, qty: 1, notes: note, id: Date.now() });
             updateOrders(cartId); // This will call updateMenuUI()
             renderMenu();
             updateOrders(cartId);
             updateMenuUI();
+          }
+        });
+      } else {
+        const note = prompt(`Add special requests for ${name}:`, "");
+        if (note !== null) {
+          activeOrders[cartId].items.push({ ...dish, qty: 1, notes: note, id: Date.now() });
+          updateOrders(cartId);
+          renderMenu();
+          updateOrders(cartId);
+          updateMenuUI();
         }
-        return;
+      }
+      return;
     }
 
     const existing = activeOrders[cartId].items.find(o => o.name === name && !o.notes);
@@ -806,7 +820,7 @@
   function processBill() { // This now opens the payment modal
     const currentOrder = activeOrders[CART_ID];
     if (!currentOrder || currentOrder.items.length === 0) {
-      return alert("Cannot checkout an empty order.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("Cannot checkout an empty order.") : alert("Cannot checkout an empty order.");
     }
     const totals = calculateTransactionTotals(currentOrder.items);
 
@@ -877,7 +891,7 @@
     const finalTotal = totals.total - discountAmount;
 
     if (paymentMethod === 'Cash' && (isNaN(amountTendered) || amountTendered < finalTotal)) {
-      return alert("Amount tendered must be greater than or equal to the total due.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("Amount tendered must be greater than or equal to the total due.") : alert("Amount tendered must be greater than or equal to the total due.");
     }
 
     // Decrement stock
@@ -914,7 +928,7 @@
     updateDashboard();
     document.getElementById('paymentModal').style.display = 'none';
     document.getElementById('servedBy').value = '';
-    alert(`Sale processed successfully!`);
+    if (typeof showAppAlert === 'function') showAppAlert(`Sale processed successfully!`);
   }
 
   // Helper to calculate subtotal, tax, and total
@@ -1007,13 +1021,19 @@
     }
   })();
 
-  function deleteItem(i) {
+  async function deleteItem(i) {
     const index = Number(i); // Ensure index is a number
     const item = menu[index];
     if (!item) return;
 
-    if (confirm(`Are you sure you want to delete ${item.name}?`)) {
-      menu.splice(index, 1);
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm(`Are you sure you want to delete ${item.name}?`);
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm(`Are you sure you want to delete ${item.name}?`)) {
+      return;
+    }
+
+    menu.splice(index, 1);
       saveData(); // Persist the deletion
       
       // Safely update all views with error handling to prevent one failure from stopping the rest
@@ -1045,7 +1065,7 @@
     } else {
       const currentOrder = activeOrders[CART_ID];
       if (!currentOrder || currentOrder.items.length === 0) {
-        return alert("No active order to preview.");
+        return (typeof showAppAlert === 'function') ? showAppAlert("No active order to preview.") : alert("No active order to preview.");
       } else {
         const totals = calculateTransactionTotals(currentOrder.items);
         currentTransaction = {

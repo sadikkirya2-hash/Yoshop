@@ -79,6 +79,21 @@ async function getCachedQuery(cacheKey, queryFn, ttl = CACHE_TTL) {
   if (requestInFlight.has(cacheKey)) {
     return await requestInFlight.get(cacheKey);
   }
+
+  async function resetLocalDatabase() {
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm('This will wipe all local data. Continue?');
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm('This will wipe all local data. Continue?')) return;
+    try {
+      indexedDB.deleteDatabase('posDB');
+      location.reload();
+    } catch (e) {
+      console.error('Failed to reset local DB:', e);
+      if (typeof showAppAlert === 'function') showAppAlert('Could not reset local database.');
+      else alert('Could not reset local database.');
+    }
+  }
   
   // Check cache validity
   const cached = requestCache.get(cacheKey);
@@ -307,7 +322,8 @@ function getEffectiveUid() {
       };
 
       request.onblocked = () => {
-        alert('Database is blocked. Please close other tabs of this app and refresh.');
+        if (typeof showAppAlert === 'function') showAppAlert('Database is blocked. Please close other tabs of this app and refresh.');
+        else alert('Database is blocked. Please close other tabs of this app and refresh.');
         reject('DB_BLOCKED');
       };
 
@@ -1013,8 +1029,11 @@ function getEffectiveUid() {
   /**
    * Switches the app context to monitor a specific shop
    */
-  function monitorShop(shopUid, shopName) {
-    if (!confirm(`Switch to monitoring mode for "${shopName}"?`)) return;
+  async function monitorShop(shopUid, shopName) {
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm(`Switch to monitoring mode for "${shopName}"?`);
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm(`Switch to monitoring mode for "${shopName}"?`)) return;
     
     console.log(`[ADMIN] Entering monitoring mode for UID: ${shopUid}`);
     
@@ -1060,7 +1079,10 @@ function getEffectiveUid() {
    * Remotely updates the status of a specific shop
    */
   async function updateTargetShopStatus(uid, status) {
-    if (!confirm(`Are you sure you want to set this shop status to ${status.toUpperCase()}?`)) return;
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm(`Are you sure you want to set this shop status to ${status.toUpperCase()}?`);
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm(`Are you sure you want to set this shop status to ${status.toUpperCase()}?`)) return;
     
     try {
       // Update the SHOP_DATA configuration for the target user
@@ -1079,13 +1101,17 @@ function getEffectiveUid() {
    * Sets a user to the Free Plan (No expiry)
    */
   async function setFreePlan(uid) {
-    if (!confirm("Set this shop to Promo Plan? This removes the subscription expiry restriction.")) return;
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm("Set this shop to Promo Plan? This removes the subscription expiry restriction.");
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm("Set this shop to Promo Plan? This removes the subscription expiry restriction.")) return;
     try {
       await setDoc(doc(dbFirestore, "users", uid), { 
         status: 'active',
         subscriptionExpires: null 
       }, { merge: true });
-      alert("Shop set to Promo Plan.");
+      if (typeof showAppAlert === 'function') showAppAlert("Shop set to Promo Plan.");
+      else alert("Shop set to Promo Plan.");
       refreshAppAdminShops();
     } catch (error) {
       handleFirebaseError(error, "Set Free Plan", `users/${uid}`);
@@ -3023,24 +3049,29 @@ function getEffectiveUid() {
     }
   })();
 
-  function deleteItem(i) {
+  async function deleteItem(i) {
     const index = Number(i); // Ensure index is a number
     const item = menu[index];
     if (!item) return;
 
-    if (confirm(`Are you sure you want to delete ${item.name}?`)) {
-      menu.splice(index, 1);
-      saveData(); // Persist the deletion
-      
-      // Safely update all views with error handling to prevent one failure from stopping the rest
-      // Update UI components immediately
-      try { renderStockListTable(); } catch (e) { console.error("Error updating stock:", e); }
-      try { renderDishesTable(); } catch (e) { console.error("Error updating dishes:", e); }
-      try { renderInventoryReport(); } catch (e) { console.error("Error updating inventory:", e); }
-      try { updateDashboard(); } catch (e) { console.error("Error updating dashboard:", e); }
-      
-      saveData(); // Persist the deletion
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm(`Are you sure you want to delete ${item.name}?`);
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm(`Are you sure you want to delete ${item.name}?`)) {
+      return;
     }
+
+    menu.splice(index, 1);
+    saveData(); // Persist the deletion
+    
+    // Safely update all views with error handling to prevent one failure from stopping the rest
+    // Update UI components immediately
+    try { renderStockListTable(); } catch (e) { console.error("Error updating stock:", e); }
+    try { renderDishesTable(); } catch (e) { console.error("Error updating dishes:", e); }
+    try { renderInventoryReport(); } catch (e) { console.error("Error updating inventory:", e); }
+    try { updateDashboard(); } catch (e) { console.error("Error updating dashboard:", e); }
+    
+    saveData(); // Persist the deletion
   }
 
   // ===== Receipt =====
@@ -3067,7 +3098,7 @@ function getEffectiveUid() {
     } else {
       const currentOrder = activeOrders[CART_ID];
       if (!currentOrder || currentOrder.items.length === 0) {
-        return alert("No active order to preview.");
+        return (typeof showAppAlert === 'function') ? showAppAlert("No active order to preview.") : alert("No active order to preview.");
       } else {
         const totals = calculateTransactionTotals(currentOrder.items);
         currentTransaction = {
@@ -3093,7 +3124,8 @@ function getEffectiveUid() {
   
   async function downloadCurrentReceiptAsPDF() {
     if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
-        alert("PDF generation libraries are not loaded. Please check your internet connection.");
+      if (typeof showAppAlert === 'function') showAppAlert("PDF generation libraries are not loaded. Please check your internet connection.");
+      else alert("PDF generation libraries are not loaded. Please check your internet connection.");
         return;
     }
     const receiptContentEl = document.getElementById('receiptContent');
@@ -3114,16 +3146,18 @@ function getEffectiveUid() {
         pdf.save(`receipt-${Date.now()}.pdf`);
 
     } catch (error) {
-        console.error("Error generating PDF:", error);
-        alert("Could not generate PDF. There might be an issue with the receipt content.");
+      console.error("Error generating PDF:", error);
+      if (typeof showAppAlert === 'function') showAppAlert("Could not generate PDF. There might be an issue with the receipt content.");
+      else alert("Could not generate PDF. There might be an issue with the receipt content.");
     }
   }
 
   async function shareReceipt() {
     const receiptContentEl = document.getElementById('receiptContent');
     if (typeof html2canvas === 'undefined') {
-        alert("Library not loaded. Please check internet connection.");
-        return;
+      if (typeof showAppAlert === 'function') showAppAlert("Library not loaded. Please check internet connection.");
+      else alert("Library not loaded. Please check internet connection.");
+      return;
     }
     try {
         const canvas = await html2canvas(receiptContentEl, { scale: 2, useCORS: true });
@@ -3140,7 +3174,8 @@ function getEffectiveUid() {
                     console.error('Share failed:', err);
                 }
             } else {
-                alert("Sharing is not supported on this device/browser. You can save as PDF instead.");
+              if (typeof showAppAlert === 'function') showAppAlert("Sharing is not supported on this device/browser. You can save as PDF instead.");
+              else alert("Sharing is not supported on this device/browser. You can save as PDF instead.");
             }
         });
     } catch (error) {
@@ -3251,13 +3286,16 @@ function getEffectiveUid() {
 
         document.getElementById('scannerConnectionStatus').textContent = 'Connected (Serial)';
         document.getElementById('scannerConnectionStatus').style.color = '#28a745';
-        alert("Connected to Serial Scanner.");
+        if (typeof showAppAlert === 'function') showAppAlert("Connected to Serial Scanner.");
+        else alert("Connected to Serial Scanner.");
       } catch (error) {
         console.error('Serial connection failed:', error);
-        alert('Failed to connect to serial scanner: ' + error.message);
+        if (typeof showAppAlert === 'function') showAppAlert('Failed to connect to serial scanner: ' + error.message);
+        else alert('Failed to connect to serial scanner: ' + error.message);
       }
     } else {
-      alert("Web Serial API not supported. If your scanner is in HID mode, it works automatically.");
+      if (typeof showAppAlert === 'function') showAppAlert("Web Serial API not supported. If your scanner is in HID mode, it works automatically.");
+      else alert("Web Serial API not supported. If your scanner is in HID mode, it works automatically.");
     }
   }
 
@@ -3307,7 +3345,7 @@ function getEffectiveUid() {
 
   async function connectBluetoothScanner() {
     if (!("bluetooth" in navigator)) {
-      return alert("Web Bluetooth is not supported in your browser.");
+      return (typeof showAppAlert === 'function') ? showAppAlert("Web Bluetooth is not supported in your browser.") : alert("Web Bluetooth is not supported in your browser.");
     }
     try {
       const device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
@@ -3340,18 +3378,18 @@ function getEffectiveUid() {
       printerDevice = device;
       printerType = 'USB';
       updatePrinterStatus(true, device.productName);
-      alert(`Connected to USB printer: ${device.productName}`);
+      if (typeof showAppAlert === 'function') showAppAlert(`Connected to USB printer: ${device.productName}`);
+      else alert(`Connected to USB printer: ${device.productName}`);
     } catch (error) {
       console.error('USB connection failed:', error);
-      alert('Failed to connect to USB printer. Make sure it is connected and you have granted permission.');
+      if (typeof showAppAlert === 'function') showAppAlert('Failed to connect to USB printer. Make sure it is connected and you have granted permission.');
+      else alert('Failed to connect to USB printer. Make sure it is connected and you have granted permission.');
     }
   }
 
   async function connectBluetoothPrinter() {
     if (!("bluetooth" in navigator)) {
-      return alert(
-        "Web Bluetooth is not supported in your browser. This feature works best in Chrome on Android, Windows, and macOS. It is NOT supported on iPhone or iPad."
-      );
+      return (typeof showAppAlert === 'function') ? showAppAlert("Web Bluetooth is not supported in your browser. This feature works best in Chrome on Android, Windows, and macOS. It is NOT supported on iPhone or iPad.") : alert("Web Bluetooth is not supported in your browser. This feature works best in Chrome on Android, Windows, and macOS. It is NOT supported on iPhone or iPad.");
     }
 
     try {
@@ -3366,12 +3404,12 @@ function getEffectiveUid() {
       printerDevice = server;
       printerType = 'BLUETOOTH';
       updatePrinterStatus(true, device.name);
-      alert(`Connected to Bluetooth printer: ${device.name}`);
+      if (typeof showAppAlert === 'function') showAppAlert(`Connected to Bluetooth printer: ${device.name}`);
+      else alert(`Connected to Bluetooth printer: ${device.name}`);
     } catch (error) {
       console.error('Bluetooth connection failed:', error);
-      alert(
-        "Failed to connect. Make sure the printer is on, discoverable (often a blinking blue light), and you grant permission. Note: This feature is not supported on iPhones/iPads."
-      );
+      if (typeof showAppAlert === 'function') showAppAlert("Failed to connect. Make sure the printer is on, discoverable (often a blinking blue light), and you grant permission. Note: This feature is not supported on iPhones/iPads.");
+      else alert("Failed to connect. Make sure the printer is on, discoverable (often a blinking blue light), and you grant permission. Note: This feature is not supported on iPhones/iPads.");
     }
   }
 
@@ -5199,9 +5237,14 @@ function getEffectiveUid() {
     updateDashboard();
   }
 
-  function editCategory(index) {
+  async function editCategory(index) {
     const oldCategoryName = dishCategories[index];
-    const newCategoryName = prompt(`Enter new name for category "${oldCategoryName}":`, oldCategoryName);
+    let newCategoryName = null;
+    if (typeof showAppPrompt === 'function') {
+      newCategoryName = await showAppPrompt(`Enter new name for category "${oldCategoryName}":`, 'Rename Category', oldCategoryName);
+    } else {
+      newCategoryName = prompt(`Enter new name for category "${oldCategoryName}":`, oldCategoryName);
+    }
 
     if (!newCategoryName || newCategoryName.trim() === '') {
       return; // User cancelled or entered empty string
@@ -6352,7 +6395,7 @@ function getEffectiveUid() {
           <h2>App Initialization Failed</h2>
           <p style="max-width: 400px; margin-bottom: 30px;">This usually happens in strict Private Browsing modes or if the local database is corrupted.</p>
           <button onclick="location.reload()" class="btn" style="background: white; color: var(--primary); padding: 12px 30px;">Try Refreshing</button>
-          <p style="margin-top: 20px; font-size: 0.8em; opacity: 0.8; cursor: pointer; text-decoration: underline;" onclick="if(confirm('This will wipe all local data. Continue?')) { indexedDB.deleteDatabase('posDB'); location.reload(); }">Reset Local Database</p>
+          <p style="margin-top: 20px; font-size: 0.8em; opacity: 0.8; cursor: pointer; text-decoration: underline;" onclick="resetLocalDatabase()">Reset Local Database</p>
         </div>
       `;
     }
@@ -6778,11 +6821,15 @@ function getEffectiveUid() {
     appAdminSettings.username = name;
     appAdminSettings.pin = pin;
     saveData();
-    alert("App Admin credentials updated.");
+    if (typeof showAppAlert === 'function') showAppAlert("App Admin credentials updated.");
+    else alert("App Admin credentials updated.");
   }
 
-  function updateShopStatus(status) {
-    if (!confirm(`Switch shop to ${status.toUpperCase()}?`)) return;
+  async function updateShopStatus(status) {
+    if (typeof showAppConfirm === 'function') {
+      const resp = await showAppConfirm(`Switch shop to ${status.toUpperCase()}?`);
+      if (!resp || !resp.confirmed) return;
+    } else if (!confirm(`Switch shop to ${status.toUpperCase()}?`)) return;
     appAdminSettings.shopStatus = status;
     saveData();
     const display = document.getElementById('currentShopStatusDisplay');
@@ -7383,19 +7430,23 @@ function getEffectiveUid() {
   let html5QrcodeScanner = null;
 
   function manualBarcodeInput() {
-    const code = prompt("Enter Product Barcode:");
-    if (code) {
-        const trimmedCode = code.trim();
-        if (document.getElementById('menuTab').classList.contains('active')) {
-            const searchInput = document.getElementById('menuSearch');
-            if (searchInput) {
-                searchInput.value = trimmedCode;
-                renderMenu();
-            }
-        } else {
-            handleBarcodeScan(trimmedCode);
+    (async () => {
+      let code = null;
+      if (typeof showAppPrompt === 'function') code = await showAppPrompt('Enter Product Barcode:', 'Barcode');
+      else code = prompt('Enter Product Barcode:');
+      if (code) {
+      const trimmedCode = code.trim();
+      if (document.getElementById('menuTab').classList.contains('active')) {
+        const searchInput = document.getElementById('menuSearch');
+        if (searchInput) {
+          searchInput.value = trimmedCode;
+          renderMenu();
         }
-    }
+      } else {
+        handleBarcodeScan(trimmedCode);
+      }
+      }
+    })();
   }
 
   function startCameraScan() {
